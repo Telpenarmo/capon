@@ -1,0 +1,33 @@
+cabal-version:      2.4
+name:               capon
+version:            0.1.0.0
+license:            MIT
+license-file:       LICENSE
+maintainer:         telpenarmo@protonmail.com
+author:             Telpenarmo
+synopsis:           CoC-driven proof assistant written in Haskell
+extra-source-files: CHANGELOG.md
+
+library
+    exposed-modules:  MyLib
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    build-depends:
+        base >=4.14.2.0 && <=4.17,
+        megaparsec >=9.2 && <=9.3,
+        repline ^>=0.4
+
+executable capon
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    default-language: Haskell2010
+    build-depends:
+        base ^>=4.14.2.0,
+        capon -any
+
+test-suite capon-test
+    type:             exitcode-stdio-1.0
+    main-is:          MyLibTest.hs
+    hs-source-dirs:   test
+    default-language: Haskell2010
+    build-depends:    base ^>=4.14.2.0
