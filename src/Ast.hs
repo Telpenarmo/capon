@@ -2,7 +2,7 @@ module Ast where
 
 import Data.Text
 
-newtype Var = V Text deriving (Show)
+newtype Var = V Text deriving (Show, Eq, Ord)
 newtype Binding = Bind (Text, Expr)
 data Sort = Type | Prop deriving (Show)
 
