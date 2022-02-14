@@ -1,13 +1,11 @@
 module Ast where
 
 import Data.Text
+import Data.Text.Encoding
 
-newtype Var = V Text deriving (Show, Eq, Ord)
+type Var = Text
 newtype Binding = Bind (Text, Expr)
-data Sort = Type | Prop deriving (Show)
-
-instance Show Binding where
-    show (Bind (n, t)) = unpack n ++ " : " ++ show t
+data Sort = Type Int | Prop
 
 type Expr = (ExprData, Location)
 
@@ -18,9 +16,5 @@ data ExprData
     | ForAll Binding Expr
     | App Expr Expr
     | LetIn Binding Expr Expr
-    deriving (Show)
 
 data Location = Location {line :: Int, column :: Int, file :: Text}
-
-instance Show Location where
-    show loc = ""

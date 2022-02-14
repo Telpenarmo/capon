@@ -1,45 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseExpr, testParser) where
+module Parser (parseExpr, pExpr) where
 
 import Ast
+import Lexer
 
 import Control.Monad.Combinators.Expr
-import Data.Char (isAlphaNum)
+import Data.Bifunctor (Bifunctor (first))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
-import Data.Void (Void)
+import Pretty
 import Text.Megaparsec
-import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-type Parser = Parsec Void Text
 type EParser = Parser ExprData
-
-sc :: Parser ()
-sc = L.space space1 (L.skipLineComment "#") empty
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme sc
-
-symbol :: Text -> Parser ()
-symbol t = () <$ L.symbol sc t
-
-parens :: Parser a -> Parser a
-parens = between (symbol "(") (symbol ")")
-
-pIdentifier :: Parser Text
-pIdentifier = (lexeme . try) (p >>= check)
-  where
-    p = (pack <$> some (satisfy isGood)) <?> "identifier"
-    isGood c = isAlphaNum c || c == '_' || c == '\''
-    check x =
-        if x `elem` rws
-            then fail $ "keyword " ++ show x ++ " cannot be an identifier"
-            else return x
-    rws = ["let", "in", "λ", "forall", "∀", "Type", "Prop"]
-
-rword :: Text -> Parser ()
-rword w = string w *> notFollowedBy alphaNumChar *> sc
 
 pBinding :: Parser Binding
 pBinding = (binder <|> parens binder) <?> "variable binding"
@@ -81,13 +55,16 @@ pLetIn = do
     pLet = rword "let"
 
 pVar :: EParser
-pVar = (Var . V <$> pIdentifier) <?> "variable"
+pVar = (Var <$> pIdentifier) <?> "variable"
 
 pSort :: EParser
 pSort = Sort <$> (pType <|> pProp) <?> "sort"
   where
-    pType = Type <$ rword "Type"
-    pProp = Prop <$ rword "Set"
+    pType = do
+        rword "Type"
+        i <- optional pInt
+        return $ Type $ Data.Maybe.fromMaybe 1 i
+    pProp = Prop <$ rword "Prop"
 
 pExpr :: Parser Expr
 pExpr = makeExprParser (nonApp <|> parens pExpr) table <?> "expression"
@@ -110,14 +87,11 @@ pExpr = makeExprParser (nonApp <|> parens pExpr) table <?> "expression"
                 ( do
                     (symbol "=>" <|> symbol "⇒") <?> "double arrow"
                     pos <- getSourcePos
-                    pure (\l r -> (ForAll (Bind ("#_", l)) r, toLoc pos))
+                    pure (\l r -> (ForAll (Bind ("", l)) r, toLoc pos))
                 )
             ]
         ]
     toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, file = pack f}
 
-parseExpr :: String -> Text -> Either (ParseErrorBundle Text Void) Expr
-parseExpr = runParser (sc *> pExpr)
-
-testParser :: Text -> IO ()
-testParser = parseTest (sc *> pExpr)
+parseExpr :: String -> Text -> Either ParsingError Expr
+parseExpr s = first PErr . runParser (sc *> pExpr) s

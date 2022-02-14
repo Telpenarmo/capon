@@ -1,6 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ConstrainedClassMethods #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Typechecker (typecheck) where
+-- {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+
+module Typechecker (typecheck, TypingError (..), Infer, checkAgainst) where
 
 import qualified Ast
 import Control.Monad.Except
@@ -8,115 +14,145 @@ import qualified Control.Monad.Except as Control.Monad
 import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Text
-import GHC.Real (reduce)
-import qualified Types as Tp
+import Types
 
-type TypeError = Text
+-- pattern A a b -> ()
 
-newtype Env = Env (Map.Map Ast.Var Tp.Term)
+data TypingError a
+    = UnknownVar Var
+    | TypeMismatch a Term Term
+    | ExpectedFunction a Term
+    | ExpectedType a Term
 
-emptyEnv :: Env
-emptyEnv = Env Map.empty
-extend :: Env -> (Ast.Var, Tp.Term) -> Env
-extend (Env env) (x, s) = Env $ Map.insert x s env
+type Infer i o = Checkable i => Except (TypingError i) o
+class Checkable a where
+    -- type Infer t = Except InferenceError t
+    infer :: Checkable a => Env -> a -> Infer a (Term, Term)
+    check :: Checkable a => Env -> a -> Term -> Infer a Term
+    check env@(Env map) e tp = do
+        (et, etp) <- infer env e
+        if normalize tp == normalize etp
+            then return et
+            else throwError $ TypeMismatch e etp tp
+      where
+        substAll t = Map.foldrWithKey subst t map
+    inferSort :: Checkable a => Env -> a -> Infer a (Term, Sort)
+    inferSort env e = do
+        (t, tp) <- infer env e
+        case normalize tp of
+            Sort s -> return (t, s)
+            _ -> throwError $ ExpectedType e tp
 
-type Infer a = Except TypeError a
+    inferPi :: Checkable a => Env -> a -> Infer a (Term, FData)
+    inferPi env e = do
+        (t, tp) <- infer env e
+        case normalize tp of
+            ForAll pi -> return (t, pi)
+            _ -> throwError $ ExpectedFunction e tp
 
-typecheck :: Ast.Expr -> Either TypeError Tp.Term
-typecheck e = runInfer $ infer emptyEnv e
+typecheck :: Checkable a => a -> Either (TypingError a) (Term, Term)
+typecheck = runExcept . infer emptyEnv
 
-runInfer :: Infer Tp.Term -> Either TypeError Tp.Term
-runInfer m = case runExcept m of
-    Left err -> Left err
-    Right res -> Right res
+checkAgainst :: Checkable a => a -> Term -> Either (TypingError a) Term
+checkAgainst m = runExcept . check emptyEnv m
 
-sortRule :: Ast.Sort -> Infer Tp.Term
-sortRule Ast.Prop = return $ Tp.Sort $ Tp.Type 1
-sortRule Ast.Type = return $ Tp.Sort $ Tp.Type 2
+type AstInfer a = Infer Ast.Expr a
 
-varRule :: Env -> Ast.Var -> Infer Tp.Term
-varRule (Env env) v = case Map.lookup v env of
-    Nothing -> throwError "Variable not in scope."
-    Just t -> return t
-
-absRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> Infer Tp.Term
-absRule env (Ast.Bind (v, e')) body loc =
-    let v' = Ast.V v
-     in do
-            t <- getType env e'
-            _ <- inferSort env e' -- mamy już e' przetłumaczone do termu
-            bd <- infer (extend env (v', t)) body
-            return $ Tp.ForAll v' t bd
-
-piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> Infer Tp.Term
-piRule env (Ast.Bind (v, tp)) body loc = do
-    tp' <- getType env tp
-    as <- inferSort env tp
-    s <- inferSort (extend env (Ast.V v, tp')) body
-    case s of
-        Tp.Prop -> return $ Tp.Sort Tp.Prop
-        Tp.Type n -> case as of
-            Tp.Prop -> return $ Tp.Sort s
-            Tp.Type i -> return $ Tp.Sort (Tp.Type (max n i))
-
-appRule :: Env -> Ast.Expr -> Ast.Expr -> Infer Tp.Term
-appRule env l r = do
-    pi <- inferPi env l
-    l' <- getType env l
-    case pi of
-        Tp.ForAll v i o -> do
-            _ <- check env r i
-            return $ Tp.subst v l' o
-        _ -> throwError "Application to non-lambda"
-
-inferSort :: Env -> Ast.Expr -> Infer Tp.Sort
-inferSort env e = do
-    t <- infer env e
-    case Tp.normalize t of
-        Tp.Sort s -> return s
-        _ -> throwError "Expected sort"
-
-inferPi :: Env -> Ast.Expr -> Infer Tp.Term
-inferPi env e = do
-    t <- infer env e
-    case Tp.normalize t of
-        pi@Tp.ForAll{} -> return pi
-        _ -> throwError "Expected ForAll"
-
-check :: Env -> Ast.Expr -> Tp.Term -> Infer ()
-check env e tp = do
-    tp' <- infer env e
-    if Tp.normalize tp == Tp.normalize tp'
-        then return ()
-        else throwError "Type mismatch"
-
-infer :: Env -> Ast.Expr -> Infer Tp.Term
-infer env@(Env m) (e, loc) =
-    case e of
-        (Ast.Sort s) -> sortRule s
+instance Checkable Ast.Expr where
+    infer env@(Env m) (e, loc) = case e of
         (Ast.Var v) -> varRule env v
-        (Ast.Lambda b e) -> absRule env b e loc
-        (Ast.ForAll b e) -> piRule env b e loc
+        (Ast.Sort s) -> do
+            (s, tp) <- sortRule s
+            return (Sort s, Sort tp)
+        (Ast.Lambda b e) -> do
+            (ld, fd) <- absRule env b e loc
+            return (Lambda ld, ForAll fd)
+        (Ast.ForAll b e) -> do
+            (fd, s) <- piRule env b e loc
+            return (ForAll fd, Sort s)
         (Ast.App l r) -> appRule env l r
-        (Ast.LetIn b e body) -> undefined
-  where
-    keepEnv t = return (m, t)
+        (Ast.LetIn b e body) -> letInRule env b e body loc
+      where
+        varRule :: Env -> Text -> AstInfer (Term, Term)
+        varRule (Env env) v = case Map.lookup v env of
+            Nothing -> throwError $ UnknownVar v
+            Just t -> return (Var v, t)
 
-getType :: Env -> Ast.Expr -> Infer Tp.Term
-getType env (e, loc) = case e of
-    (Ast.Sort Ast.Type) -> return (Tp.Sort $ Tp.Type 1)
-    (Ast.Sort Ast.Prop) -> return (Tp.Sort Tp.Prop)
-    Ast.Var v -> return $ Tp.Var v
-    Ast.Lambda (Ast.Bind (v, e)) body -> do
-        e' <- getType env e
-        b' <- getType env body
-        return $ Tp.Lambda (Ast.V v) e' b'
-    Ast.ForAll (Ast.Bind (v, e)) body -> do
-        e' <- getType env e
-        b' <- getType env body
-        return $ Tp.ForAll (Ast.V v) e' b'
-    Ast.App l r -> do
-        l' <- getType env l
-        r' <- getType env r
-        return $ Tp.App l' r'
-    Ast.LetIn bind x0 x1 -> undefined
+        sortRule :: Ast.Sort -> AstInfer (Sort, Sort)
+        sortRule Ast.Prop = return (Prop, Type 1)
+        sortRule (Ast.Type i) = return (Type i, Type $ i + 1)
+
+        absRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (LData, FData)
+        absRule env (Ast.Bind (v, arg)) body loc = do
+            (at, _) <- inferSort env arg
+            (bt, bd) <- infer (extend env (v, at)) body
+            return (LD (v, at, bt), FD (v, at, bd))
+
+        piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (FData, Sort)
+        piRule env (Ast.Bind (v, arg)) body loc = do
+            (at, as) <- inferSort env arg
+            (bt, s) <- inferSort (extend env (v, at)) body
+            let ret' = ret at bt
+             in case s of
+                    Prop -> ret' Prop
+                    Type n -> case as of
+                        Prop -> ret' s
+                        Type n' -> ret' $ Type $ max n n'
+          where
+            ret a b s = return (FD (v, a, b), s)
+
+        appRule :: Env -> Ast.Expr -> Ast.Expr -> AstInfer (Term, Term)
+        appRule env l r = do
+            (lt, FD (v, i, o)) <- inferPi env l
+            rt <- check env r i
+            return (App lt rt, subst v lt o)
+
+        letInRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Expr -> Ast.Location -> AstInfer (Term, Term)
+        -- let v:tp = arg in body === (\v:tp -> body) arg
+        letInRule env (Ast.Bind (v, tp)) arg body loc = do
+            (tp', _) <- inferSort env tp -- typ argumentu
+            (bt, btp) <- infer (extend env (v, tp')) body
+            at <- check env arg tp' -- argument jako term
+            return (subst v at bt, subst v at btp)
+
+instance Checkable Term where
+    infer env t = withDef t $ case t of
+        Var v -> varRule env v
+        Sort s -> Sort <$> sortRule s
+        App l r -> appRule env l r
+        Lambda ld -> ForAll <$> absRule env ld
+        ForAll fd -> Sort <$> piRule env fd
+      where
+        varRule :: Env -> Var -> Infer Term Term
+        varRule (Env env) v = case Map.lookup v env of
+            Nothing -> throwError $ UnknownVar v
+            Just t -> return t
+
+        sortRule :: Sort -> Infer Term Sort
+        sortRule Prop = return $ Type 1
+        sortRule (Type i) = return $ Type $ i + 1
+
+        appRule :: Env -> Term -> Term -> Infer Term Term
+        appRule env l r = do
+            (lt, FD (v, i, o)) <- inferPi env l
+            rt <- check env r i
+            return $ subst v lt o
+
+        absRule :: Env -> LData -> Infer Term FData
+        absRule env (LD (v, tp, body)) = do
+            (at, _) <- inferSort env tp
+            (bt, bd) <- infer (extend env (v, at)) body
+            return $ FD (v, at, bd)
+
+        piRule :: Env -> FData -> Infer Term Sort
+        piRule env (FD (v, tp, body)) = do
+            (at, as) <- inferSort env tp
+            (bt, s) <- inferSort (extend env (v, at)) body
+            case s of
+                Prop -> return Prop
+                Type n -> case as of
+                    Prop -> return s
+                    Type n' -> return $ Type $ max n n'
+
+withDef :: Term -> Infer Term Term -> Infer Term (Term, Term)
+withDef t m = m >>= (\r -> return (t, r))
