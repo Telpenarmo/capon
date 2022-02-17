@@ -54,6 +54,7 @@ instance Pretty Ast.ExprData where
     ppPrec p (Ast.App l r) = parensIf (p > 5) $ ppPrec 5 l <+> ppPrec 6 r
     ppPrec p (Ast.LetIn (Ast.Bind (n, tp)) e1 e2) =
         parensIf (p > 0) $ hang ("let" <+> (pp . unpack $ n) <+> "=" <+> ppPrec 0 e1 <+> "in") 2 (ppPrec 0 e2)
+    ppPrec _ (Ast.Error t) = "Error" <+> text (unpack t)
 
 instance Pretty Ast.Expr where ppPrec n (e, _) = ppPrec n e
 

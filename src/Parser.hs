@@ -16,7 +16,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 type EParser = Parser ExprData
 
 pBinding :: Parser Binding
-pBinding = (binder <|> parens binder) <?> "variable binding"
+pBinding = (binder <|> parensRec recv binder) <?> "variable binding"
   where
     binder = do
         v <- pIdentifier
@@ -24,6 +24,9 @@ pBinding = (binder <|> parens binder) <?> "variable binding"
         pure $ Bind (v, t)
     pAnn = (pColon *> pExpr) <?> "type annotation"
     pColon = symbol ":"
+    recv = do
+        err <- eatError
+        return $ Bind ("v", err)
 
 pAbstractor :: (Binding -> Expr -> ExprData) -> Parser () -> EParser
 pAbstractor f sym = do
@@ -45,12 +48,14 @@ pForall = pAbstractor ForAll pSym
 pLetIn :: EParser
 pLetIn = do
     pLet
-    b <- pBinding
-    symbol "="
+    b <- recParseUntil recv (symbol "=") pBinding
     e1 <- pExpr
     pIn
     LetIn b e1 <$> pExpr
   where
+    recv = do
+        err <- eatError
+        return $ Bind ("v", err)
     pIn = rword "in"
     pLet = rword "let"
 
@@ -66,9 +71,20 @@ pSort = Sort <$> (pType <|> pProp) <?> "sort"
         return $ Type $ Data.Maybe.fromMaybe 1 i
     pProp = Prop <$ rword "Prop"
 
-pExpr :: Parser Expr
-pExpr = makeExprParser (nonApp <|> parens pExpr) table <?> "expression"
+eatError :: Parser Expr
+eatError = do
+    pos <- getSourcePos
+    dt <- packErr <$> eat
+    pure (dt, toLoc pos)
   where
+    eat :: Parser String
+    eat = some ((eof >> (fail "eof" :: Parser Char)) <|> satisfy (/= ')'))
+    packErr = Error . pack
+
+pExpr :: Parser Expr
+pExpr = makeExprParser (nonApp <|> inParens) table <?> "expression"
+  where
+    inParens = parensRec eatError pExpr
     nonApp = do
         pos <- getSourcePos
         dt <- choice [pLambda, pForall, pVar, pLetIn, pSort]
@@ -91,7 +107,8 @@ pExpr = makeExprParser (nonApp <|> parens pExpr) table <?> "expression"
                 )
             ]
         ]
-    toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, file = pack f}
+toLoc :: SourcePos -> Location
+toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, file = pack f}
 
 parseExpr :: String -> Text -> Either ParsingError Expr
 parseExpr s = first PErr . runParser (sc *> pExpr) s

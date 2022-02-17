@@ -16,5 +16,6 @@ data ExprData
     | ForAll Binding Expr
     | App Expr Expr
     | LetIn Binding Expr Expr
+    | Error Text
 
 data Location = Location {line :: Int, column :: Int, file :: Text}
