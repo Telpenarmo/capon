@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Pretty where
+module Pretty(renderP, renderPLen, Pretty) where
 
 import qualified Ast
 import Control.Monad.Except (runExcept)

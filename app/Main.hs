@@ -30,7 +30,9 @@ printP = putStrLn . renderP
 printError :: Pretty a => a -> IO ()
 printError a = do
   setSGR [SetColor Foreground Vivid Red]
-  putStrLn $ renderP a
+  putStr $ renderP a
+  setSGR [SetColor Foreground Vivid White]
+  putStrLn ""
 
 eval :: Tactic -> Proof -> Either (Proove Proof) (Proove Term)
 eval (Intro n) = Left <$> intro n
@@ -42,7 +44,7 @@ test :: IO ()
 test = do
   t <- T.getLine
   case parseExpr "test" t of
-    Left e -> printP e
+    Left e -> printError e
     Right e -> do
       printP e
       case typecheck e of
@@ -55,7 +57,7 @@ proove = do
   putStr ">> "
   t <- T.getLine
   case parseProof "proof" t of
-    Left e -> printP e
+    Left err -> printError err
     Right (InitProof e) -> case typecheck e of
       Left txt -> putStrLn $ renderP txt
       Right (t, tp) -> do
@@ -69,7 +71,7 @@ loop pf = do
 
   t <- T.getLine
   case parseTactic "test" t of
-    Left e -> printP e
+    Left err -> printError err
     Right tac ->
       case eval tac pf of
         Left pm -> case runExcept pm of
@@ -78,9 +80,9 @@ loop pf = do
         Right tm -> case runExcept tm of
           Left err -> printError err
           Right t -> print "Proof: " >> printP t
-  where
-    height = do
-      i <- getTerminalSize
-      case i of
-        Nothing -> return 10
-        Just (h,_) -> return 10
+ where
+  height = do
+    i <- getTerminalSize
+    case i of
+      Nothing -> return 10
+      Just (h, _) -> return 10
