@@ -1,7 +1,6 @@
 module Ast where
 
-import Data.Text
-import Data.Text.Encoding
+import Data.Text ( Text )
 
 type Var = Text
 newtype Binding = Bind (Text, Expr)

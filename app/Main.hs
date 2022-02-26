@@ -1,7 +1,7 @@
 module Main where
 
 import qualified Ast
-import Control.Monad (unless)
+import Control.Monad
 import qualified Data.Text.IO as T
 import Proof
 import TacticParser
@@ -9,7 +9,6 @@ import Typechecker
 import Types
 
 import Control.Monad.Except
-import Data.Text ()
 import Parser (parseExpr)
 import Pretty
 import System.Console.ANSI
@@ -85,4 +84,4 @@ loop pf = do
     i <- getTerminalSize
     case i of
       Nothing -> return 10
-      Just (h, _) -> return 10
+      Just (h, _) -> return h

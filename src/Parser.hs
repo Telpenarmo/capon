@@ -9,7 +9,6 @@ import Control.Monad.Combinators.Expr
 import Data.Bifunctor (Bifunctor (first))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
-import Pretty
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 
@@ -62,7 +61,7 @@ pSort = Sort <$> (pType <|> pProp) <?> "sort"
   pType = do
     rword "Type"
     i <- optional pInt
-    return $ Type $ Data.Maybe.fromMaybe 1 i
+    return $ Type $ fromMaybe 1 i
   pProp = Prop <$ rword "Prop"
 
 eatError :: Parser (Text -> Expr)

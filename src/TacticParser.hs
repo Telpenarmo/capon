@@ -2,10 +2,7 @@
 
 module TacticParser(parseProof, parseTactic, Tactic(..), Command(..)) where
 
-import Control.Monad.Combinators.Expr
-import Data.Char (isAlphaNum)
-import Data.Text (Text, pack)
-import Data.Void (Void)
+import Data.Text ( Text )
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -36,14 +33,6 @@ pApply = Apply <$> pIdPDot "apply" pIdentifier
 
 pQed :: Parser Tactic
 pQed = Qed <$ pIdPDot "qed" (rword "")
-
--- pRewrite :: Parser Rewrite
--- pRewrite = pIdPDot "rewrite" p
---  where
---   p = do
---     id <- pIdentifier
---     _ <- rword "with"
---     parens (many pIdentifier)
 
 pTactic :: Parser Tactic
 pTactic = choice [pIntro, pApply, pQed]

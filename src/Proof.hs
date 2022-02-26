@@ -64,10 +64,10 @@ completed (P (_, Complete _)) = True
 completed (P (_, Incomplete _ _)) = False
 
 qed :: Proof -> Proove Term
-qed (P(g, Complete t)) = case checkAgainst t g of
+qed (P (g, Complete t)) = case checkAgainst t g of
     Left err -> throwError WrongProof
     Right te -> return te
-qed (P(_, Incomplete _ _)) = throwError GoalLeft
+qed (P (_, Incomplete _ _)) = throwError GoalLeft
 
 goUp :: Context -> ProofTree -> ProofStatus
 goUp ctx pf = case pf of
@@ -118,5 +118,3 @@ applyAssm name = wrap f
         Just t' -> do
             newCtx <- unfoldApp t' g ctx
             return $ fill (Var name) newCtx
-
--- typem celu musi być Prop
