@@ -20,16 +20,18 @@ lexeme = L.lexeme sc
 symbol :: Text -> Parser ()
 symbol t = () <$ L.symbol sc t
 
-recParseUntil :: Parser a -> Parser b -> Parser a -> Parser a
+recParseUntil :: Parser (Text -> a) -> Parser b -> Parser a -> Parser a
 recParseUntil onErr end p = withRecovery recovery (p <* end)
  where
-  recovery e = registerParseError e *> onErr <* end
+  recovery e = registerParseError e *> appEater
+  appEater = onErr >>= (<$> eater)
+  eater = pack <$> someTill (satisfy $ const True) end
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
-parensRec :: Parser a -> Parser a -> Parser a
-parensRec onErr p = recParseUntil onErr (symbol ")") $ symbol "(" *> p
+parensRec :: Parser (Text -> a) -> Parser a -> Parser a
+parensRec onErr p = symbol "(" *> recParseUntil onErr (symbol ")") p
 
 pIdentifier :: Parser Text
 pIdentifier = (lexeme . try) (p >>= check)
