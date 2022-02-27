@@ -37,11 +37,15 @@ executable capon
     main-is:          Main.hs
     hs-source-dirs:   app
     default-language: Haskell2010
+    default-extensions:
+        OverloadedStrings,
+        LambdaCase
     build-depends:
         base ^>=4.14.2.0,
         text,
         mtl,
         ansi-terminal >= 0.11,
+        repline,
         capon -any
 
 test-suite capon-test
