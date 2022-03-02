@@ -6,7 +6,6 @@ import qualified Ast
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
-import Data.List (isPrefixOf)
 import Data.Text (Text, pack)
 import Parser (parseExpr)
 import Pretty
@@ -23,30 +22,25 @@ import Types
 type IState = Maybe Proof
 type Repl a = HaskelineT (StateT IState IO) a
 
-(|>>) :: Pretty e => Either e a -> (a -> Repl ()) -> Repl ()
-ex |>> cont = case ex of
-  Left e -> liftIO $ printError e
-  Right a -> cont a
+(|>>) :: (Pretty e, MonadIO m) => Either e a -> (a -> m ()) -> m ()
+e |>> cont = either (liftIO . printError) cont e
 
 infixr 1 >|>
-(>|>) :: Pretty e => (t -> Either e a) -> (a -> Repl ()) -> t -> Repl ()
+(>|>) :: (Pretty e, MonadIO m) => (t -> Either e a) -> (a -> m ()) -> t -> m ()
 f >|> g = \x -> f x |>> g
 
 prompt :: MultiLine -> Repl String
 prompt = \case
   MultiLine -> pure ":"
-  SingleLine ->
-    get >>= \case
-      Just pf -> pure "prooving > "
-      Nothing -> pure ">>> "
+  SingleLine -> get >>= pure <$> maybe ">>> " (const "prooving > ")
 
 cmd :: String -> Repl ()
 cmd s = do
   st <- get
   maybe handleNewProof handleTactic st $ pack s
  where
-  handleTactic pf = parseTactic "test" >|> flip evalTactic pf
-  handleNewProof = parseProof "theorem" >|> check >|> (updateProof . proof emptyEnv . fst)
+  handleTactic pf = parseTactic "tactic" >|> flip evalTactic pf
+  handleNewProof = parseProof "theorem" >|> check >|> (updateState . proof emptyEnv . fst)
   check (InitProof e) = typecheck e
 
 help :: String -> Repl ()
@@ -82,40 +76,47 @@ main =
 
 printP :: Pretty a => a -> IO ()
 printP = putStrLn . renderP
-printError :: Pretty a => a -> IO ()
-printError a = do
-  setSGR [SetColor Foreground Vivid Red]
-  putStr $ renderP a
+
+printColored :: Pretty a => Color -> a -> IO ()
+printColored c x = do
+  setSGR [SetColor Foreground Vivid c]
+  putStr $ renderP x
   setSGR [SetColor Foreground Vivid White]
   putStrLn ""
 
-updateProof :: Proof -> Repl ()
-updateProof pf = put (Just pf) >> liftIO (displayProof pf)
+printError :: Pretty a => a -> IO ()
+printError = printColored Red
+printSuccess :: Pretty a => a -> IO ()
+printSuccess = printColored Green
+
+updateState :: Proof -> Repl ()
+updateState pf = do
+  put $ Just pf
+  liftIO $ displayProof pf
 
 evalTactic :: Tactic -> Proof -> Repl ()
 evalTactic = eval
  where
-  eval (Intro n) = updatePF . intro n
-  eval (Apply n) = updatePF . applyAssm n
+  eval (Intro n) = updateProof . intro n
+  eval (Apply n) = updateProof . applyAssm n
   eval (Rewrite n) = error "not implemented"
-  eval Qed = (`run` finish) . qed
-  run :: Proove a -> (a -> Repl ()) -> Repl ()
-  run pv f = runExcept pv |>> f
-  updatePF = flip run updateProof
-  finish :: Pretty a => a -> Repl ()
-  finish t = put Nothing >> liftIO (putStr "Proof: " >> printP t)
+  eval Qed = (runExcept >|> finish) . qed
+  updateProof = runExcept >|> updateState
+  finish t = do
+    put Nothing
+    liftIO $ putStr "Proof: " >> printSuccess t
 
 test :: Text -> Repl ()
 test = parseExpr "test" >|> typecheck >|> (liftIO . printP . fst)
 
 displayProof :: Proof -> IO ()
 displayProof pf = do
-  times <- liftIO height
-  liftIO $ putStrLn $ replicate times '\n'
-  liftIO $ printP pf
+  times <- height
+  putStrLn $ replicate times '\n'
+  printP pf
  where
   height = do
     i <- getTerminalSize
     case i of
-      Nothing -> return 10
+      Nothing -> return 5
       Just (h, _) -> return h
