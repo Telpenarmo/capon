@@ -21,12 +21,18 @@ cmd s = do
   maybe handleNewProof handleTactic st $ pack s
 
 help :: String -> IO ()
-help args = putStrLn $ "Help: " ++ args
+help args =
+  putStrLn $
+    "Commands available from the prompt:\n"
+      ++ "\n"
+      ++ "  :help, :?         display this list\n"
+      ++ "  :type <expr>      show the type of <expr>\n"
 
 opts :: [(String, String -> Repl ())]
 opts =
-  [ ("help", liftIO . help)
-  , ("test", liftIO . test . pack)
+  [ ("?", liftIO . help)
+  , ("help", liftIO . help)
+  , ("type", liftIO . test . pack)
   ]
 
 completer :: (Monad m, MonadState IState m) => WordCompleter m
