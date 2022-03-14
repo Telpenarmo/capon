@@ -1,12 +1,14 @@
 module Main (main) where
 
 import qualified Ast
+import Console
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Text (Text, pack)
 import Handlers
 import System.Console.Repline
 import System.Environment (getArgs)
+import System.Exit (exitSuccess)
 
 type Repl a = HaskelineT (StateT IState IO) a
 
@@ -27,19 +29,37 @@ help args =
       ++ "\n"
       ++ "  :help, :?         display this list\n"
       ++ "  :type <expr>      show the type of <expr>\n"
+      ++ "  :quit             exit Capon\n"
 
 opts :: [(String, String -> Repl ())]
 opts =
   [ ("?", liftIO . help)
   , ("help", liftIO . help)
   , ("type", liftIO . test . pack)
+  , ("quit", const quit)
   ]
+
+quit :: Repl ()
+quit = do
+  decision <- final
+  case decision of
+    Continue -> return ()
+    Exit -> liftIO exitSuccess
 
 completer :: (Monad m, MonadState IState m) => WordCompleter m
 completer n = return ["foo"]
 
 final :: Repl ExitDecision
-final = Exit <$ liftIO (putStrLn "Goodbye!")
+final = do
+  st <- get
+  case st of
+    Nothing -> exit
+    Just pr -> do
+      liftIO $ putStr "You have an unfinished proof. Are you sure?"
+      confirmed <- liftIO $ confirm True
+      if confirmed then exit else return Continue
+ where
+  exit = Exit <$ liftIO (putStrLn "Goodbye!")
 
 main :: IO ()
 main =

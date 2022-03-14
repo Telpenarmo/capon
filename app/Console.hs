@@ -1,6 +1,8 @@
 module Console where
 
 import Control.Monad.Except (MonadIO, liftIO)
+import Data.Char (toLower)
+import Data.List (isPrefixOf)
 import Pretty (Pretty, renderP)
 import System.Console.ANSI
 
@@ -25,3 +27,14 @@ printError :: Pretty a => a -> IO ()
 printError = printColored Red
 printSuccess :: Pretty a => a -> IO ()
 printSuccess = printColored Green
+
+confirm :: Bool -> IO Bool
+confirm deflt = do
+    let (y, n) = if deflt then ("Y", "n") else ("y", "N")
+    putStrLn $ " [" ++ y ++ "/" ++ n ++ "]"
+    ans <- getLine
+    return $ case fmap toLower ans of
+        "" -> deflt
+        ans | ans `isPrefixOf` "yes" -> True
+        ans | ans `isPrefixOf` "no" -> False
+        _ -> False
