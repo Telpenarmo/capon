@@ -19,7 +19,7 @@ import Types
 -- pattern A a b -> ()
 
 data TypingError a
-    = UnknownVar Var
+    = UnknownVar Text
     | TypeMismatch a Term Term
     | ExpectedFunction a Term
     | ExpectedType a Term
@@ -35,7 +35,7 @@ class Checkable a where
             then return et
             else throwError $ TypeMismatch e etp tp
       where
-        substAll t = Map.foldrWithKey subst t map
+        substAll t = Map.foldrWithKey substitute t map
     inferSort :: Checkable a => Env -> a -> Infer a (Term, Sort)
     inferSort env e = do
         (t, tp) <- infer env e
@@ -72,11 +72,12 @@ instance Checkable Ast.Expr where
             return (ForAll fd, Sort s)
         (Ast.App l r) -> appRule env l r
         (Ast.LetIn b e body) -> letInRule env b e body loc
+        (Ast.Error e) -> undefined 
       where
         varRule :: Env -> Text -> AstInfer (Term, Term)
         varRule (Env env) v = case Map.lookup v env of
             Nothing -> throwError $ UnknownVar v
-            Just t -> return (Var v, t)
+            Just t -> return (Var (V v 0), t)
 
         sortRule :: Ast.Sort -> AstInfer (Sort, Sort)
         sortRule Ast.Prop = return (Prop, Type 1)
@@ -105,7 +106,7 @@ instance Checkable Ast.Expr where
         appRule env l r = do
             (lt, FD (v, i, o)) <- inferPi env l
             rt <- check env r i
-            return (App lt rt, subst v lt o)
+            return (App lt rt, substitute v lt o)
 
         letInRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Expr -> Ast.Location -> AstInfer (Term, Term)
         -- let v:tp = arg in body === (\v:tp -> body) arg
@@ -113,7 +114,7 @@ instance Checkable Ast.Expr where
             (tp', _) <- inferSort env tp -- typ argumentu
             (bt, btp) <- infer (extend env (v, tp')) body
             at <- check env arg tp' -- argument jako term
-            return (subst v at bt, subst v at btp)
+            return (substitute v at bt, substitute v at btp)
 
 instance Checkable Term where
     infer env t = withDef t $ case t of
@@ -124,7 +125,7 @@ instance Checkable Term where
         ForAll fd -> Sort <$> piRule env fd
       where
         varRule :: Env -> Var -> Infer Term Term
-        varRule (Env env) v = case Map.lookup v env of
+        varRule (Env env) (V v _) = case Map.lookup v env of
             Nothing -> throwError $ UnknownVar v
             Just t -> return t
 
@@ -136,7 +137,7 @@ instance Checkable Term where
         appRule env l r = do
             (lt, FD (v, i, o)) <- inferPi env l
             rt <- check env r i
-            return $ subst v lt o
+            return $ substitute v lt o
 
         absRule :: Env -> LData -> Infer Term FData
         absRule env (LD (v, tp, body)) = do

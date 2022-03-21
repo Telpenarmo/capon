@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Pretty(renderP, renderPLen, Pretty) where
+module Pretty (renderP, renderPLen, Pretty) where
 
 import qualified Ast
 import Control.Monad.Except (runExcept)
@@ -72,7 +72,9 @@ viewApp e1 e2 = go e1 [e2]
     go (Ast.App a b, _) xs = go a (b : xs)
     go f xs = (f, xs)
 
-instance Pretty T.Var where ppPrec _ = text . unpack
+instance Pretty T.Var where
+    ppPrec _ (T.V x n) = text $ unpack x ++ replicate n '^'
+
 instance Pretty T.Term where
     ppPrec _ (T.Var v) = pp v
     ppPrec _ (T.Sort T.Prop) = "Prop"
@@ -83,7 +85,7 @@ instance Pretty T.Term where
     ppPrec p (T.App l r) = parensIf (p > 5) $ ppPrec 5 l <+> ppPrec 6 r
 
 instance Pretty (TypingError Ast.Expr) where
-    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> pp v
+    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text (unpack v)
     ppPrec _ (TypeMismatch (e, loc) actual expected) =
         pp loc PP.<> ":" <+> "Expression " <+> cite e <+> "has type" <+> cite actual <+> "but" <+> cite expected <+> "was expected."
     ppPrec _ (ExpectedFunction (actual, loc) tp) =

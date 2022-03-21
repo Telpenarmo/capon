@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Types where
@@ -8,10 +9,10 @@ import Data.List (span, union, (\\))
 import qualified Data.Map as Map
 import Data.Text (Text, pack, unpack)
 
-type Var = Text
+data Var = V Text Int deriving (Eq, Ord)
 data Sort = Prop | Type Int deriving (Show, Eq)
 
-type Abstraction = (Var, Term, Term)
+type Abstraction = (Text, Term, Term)
 newtype LData = LD Abstraction
 newtype FData = FD Abstraction
 
@@ -23,89 +24,76 @@ data Term
   | ForAll FData
 
 instance Eq Term where
-  (==) = alphaEq []
+  (==) = alpha []
    where
-    alphaEq :: [(Var, Var)] -> Term -> Term -> Bool
-    alphaEq _ (Sort s) (Sort s') = s == s'
-    alphaEq env (Var v) (Var v') = eqVar env v v'
-    alphaEq env (App l r) (App l' r') = alphaEq env l l' && alphaEq env r r'
-    alphaEq env (Lambda (LD (v, t, b))) (Lambda (LD (v', t', b'))) = alphaEq env t t' && alphaEq ((v, v') : env) b b'
-    alphaEq env (ForAll (FD (v, t, b))) (ForAll (FD (v', t', b'))) = alphaEq env t t' && alphaEq ((v, v') : env) b b'
-    alphaEq _ _ _ = False
+    alpha _ (Sort s) (Sort s') = s == s'
+    alpha ctx (Var v) (Var v') = varEq ctx v v'
+    alpha ctx (App f a) (App f' a') = alpha ctx f f' && alpha ctx a a'
+    alpha ctx (Lambda (LD (x, tp, bd))) (Lambda (LD (x', tp', bd'))) =
+      alpha ctx tp tp' && alpha ((x, x') : ctx) bd bd'
+    alpha ctx (ForAll (FD (x, tp, bd))) (ForAll (FD (x', tp', bd'))) =
+      alpha ctx tp tp' && alpha ((x, x') : ctx) bd bd'
+    alpha _ _ _ = False
 
-    eqVar [] l r = l == r
-    eqVar ((x, y) : env) l r = x == l && y == r || x /= l && y /= r && eqVar env l r
+    varEq [] (V x n) (V x' n') = x == x' && n == n'
+    varEq ((xL', xR') : ctx) (V xL nL) (V xR nR) =
+      xL == xL' && xR == xR' || varEq ctx (V xL nL') (V xR nR')
+     where
+      !nL' = if xL == xL' then nL - 1 else nL
+      !nR' = if xR == xR' then nR - 1 else nR
 
 normalize :: Term -> Term
-normalize (App f a) = case f' of
-  Lambda (LD (v, tp, body)) -> normalize (subst v a body)
-  _ -> App f' a'
- where
-  f' = normalize f
-  a' = normalize a
-normalize (Lambda (LD (v, t, t'))) = Lambda $ LD (v, normalize t, normalize t')
-normalize (ForAll (FD (v, t, t'))) = ForAll $ FD (v, normalize t, normalize t')
+normalize (App f a) = case normalize f of
+  Lambda (LD (x, tp, body)) -> normalize $ shift (-1) x $ substitute x (shift 1 x $ normalize a) body
+  f' -> App f' $ normalize a
+normalize (Lambda (LD (v, t, bd))) = Lambda $ LD (v, normalize t, normalize bd)
+normalize (ForAll (FD (v, t, bd))) = ForAll $ FD (v, normalize t, normalize bd)
 normalize (Sort s) = Sort s
 normalize (Var v) = Var v
 
-freeVars :: Term -> [Var]
-freeVars (Sort _) = []
-freeVars (Var x) = [x]
-freeVars (Lambda (LD (v, t, b))) = freeVars t `union` (freeVars b \\ [v])
-freeVars (ForAll (FD (v, t, b))) = freeVars t `union` (freeVars b \\ [v])
-freeVars (App a b) = freeVars a `union` freeVars b
-
-allVars :: Term -> [Var]
-allVars (Sort _) = []
-allVars (Var x) = [x]
-allVars (Lambda (LD (v, t, b))) = allVars t `union` allVars b
-allVars (ForAll (FD (v, t, b))) = allVars t `union` allVars b
-allVars (App a b) = allVars a `union` allVars b
-
-subst :: Var -> Term -> Term -> Term
-subst x s b = sub vs0 b
+subst :: Text -> Int -> Term -> Term -> Term
+subst x n arg = \case
+  (Sort s) -> Sort s
+  e@(Var (V x' n')) -> if x == x' && n == n' then arg else e
+  App f a -> App (go f) (go a)
+  Lambda (LD (x', tp, bd)) -> Lambda $ LD (x', tp', bd')
+   where
+    tp' = go tp
+    bd' = subst x n' (shift 1 x' arg) bd
+    !n' = if x == x' then n + 1 else n
+  ForAll (FD (x', tp, bd)) -> ForAll $ FD (x', tp', bd')
+   where
+    tp' = go tp
+    bd' = subst x n' (shift 1 x' arg) bd
+    !n' = if x == x' then n + 1 else n
  where
-  sub _ s@(Sort _) = s
-  sub _ e@(Var v)
-    | v == x = s
-    | otherwise = e
-  sub vs e@(Lambda (LD (v, t, e')))
-    | v == x = e
-    | v `elem` fvs = Lambda $ LD (v', t', sub (v' : vs) e'')
-    | otherwise = Lambda $ LD (v, t', sub vs e')
-   where
-    v' = newId vs
-    e'' = subst v (Var v') e'
-    t' = sub vs t
-  sub vs e@(ForAll (FD (v, t, e')))
-    | v == x = e
-    | v `elem` fvs = ForAll $ FD (v', t', sub (v' : vs) e'')
-    | otherwise = ForAll $ FD (v, t', sub vs e')
-   where
-    v' = newId vs
-    e'' = subst v (Var v') e'
-    t' = sub vs t
-  sub vs (App f a) = sub vs f `App` sub vs a
-  fvs = freeVars s
-  vs0 = fvs `union` allVars b
+  go = subst x n arg
 
-newId :: [Var] -> Var
-newId vs = head (fmap pack names \\ vs)
+substitute :: Text -> Term -> Term -> Term
+substitute x = subst x 0
 
-names :: [String]
-names = [[i] | i <- ['a' .. 'z']] ++ [i : show j | j <- [1 ..], i <- ['a' .. 'z']]
-
-newtype Env = Env (Map.Map Var Term)
+newtype Env = Env (Map.Map Text Term)
 
 emptyEnv :: Env
 emptyEnv = Env Map.empty
-extend :: Env -> (Var, Term) -> Env
+extend :: Env -> (Text, Term) -> Env
 extend (Env env) (x, s) = Env $ Map.insert x s env
-unionEnv :: Env -> Env -> Env
-unionEnv (Env l) (Env r) = Env $ Map.union l r
-singleton :: Var -> Term -> Env
-singleton v t = Env $ Map.singleton v t
-lookupEnv :: Env -> Var -> Maybe Term
+
+lookupEnv :: Env -> Text -> Maybe Term
 lookupEnv (Env env) v = Map.lookup v env
-subset :: Env -> Env -> Bool
-subset (Env l) (Env r) = Map.empty == Map.difference l r
+
+shift :: Int -> Text -> Term -> Term
+shift d x e = go e 0
+ where
+  go e lev = case e of
+    Lambda (LD (x', tp, bd)) -> Lambda $ LD (x', go tp lev', go bd lev)
+     where
+      !lev' = if x == x' then lev + 1 else lev
+    ForAll (FD (x', tp, bd)) -> ForAll $ FD (x', go tp c', go bd lev)
+     where
+      !c' = if x == x' then lev + 1 else lev
+    App f a -> App (go f lev) (go a lev)
+    Var (V x' n) -> Var $ V x' n'
+     where
+      !n' = if x == x' && n >= lev then n + d else n
+    Sort s -> Sort s

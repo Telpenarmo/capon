@@ -22,13 +22,13 @@ data ProofTree
     = Done Term
     | Goal Goal
     | Appl ProofTree ProofTree
-    | Abst Var Term ProofTree
+    | Abst Text Term ProofTree
 
 data Context
     = Root
     | CApL Context ProofTree
     | CApR ProofTree Context
-    | CAbs Var Term Context
+    | CAbs Text Term Context
 
 data ProofStatus = Complete Term | Incomplete Goal Context
 newtype Proof = P (Term, ProofStatus)
@@ -87,7 +87,7 @@ intro name = wrap f
         ForAll (FD (v, tp, bd)) ->
             return $ Incomplete (env', ass) (CAbs name tp ctx)
           where
-            ass = subst v (Var name) (normalize bd)
+            ass = substitute v (Var $ V name 0) (normalize bd)
             env' = extend env (name, tp)
         _ -> throwError ExpectedProduct
 
@@ -117,4 +117,4 @@ applyAssm name = wrap f
         Nothing -> throwError $ AssumptionNotFound name
         Just t' -> do
             newCtx <- unfoldApp t' g ctx
-            return $ fill (Var name) newCtx
+            return $ fill (Var $ V name 0) newCtx
