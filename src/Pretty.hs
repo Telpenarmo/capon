@@ -73,15 +73,15 @@ viewApp e1 e2 = go e1 [e2]
     go f xs = (f, xs)
 
 instance Pretty T.Var where
-    ppPrec _ (T.V x n) = text $ unpack x ++ replicate n '^'
+    ppPrec _ = text . show
 
 instance Pretty T.Term where
     ppPrec _ (T.Var v) = pp v
     ppPrec _ (T.Sort T.Prop) = "Prop"
     ppPrec _ (T.Sort (T.Type i)) = "Type" <+> int i
-    ppPrec p (T.Lambda (T.LD (v, tp, bd))) = parensIf (p > 0) $ "λ" PP.<> ppBinding v tp <+> "→" <+> ppPrec 0 bd
-    ppPrec p (T.ForAll (T.FD ("", tp, bd))) = parensIf (p > 4) $ ppPrec 5 tp <+> "⇒" <+> ppPrec 4 bd
-    ppPrec p (T.ForAll (T.FD (v, tp, bd))) = parensIf (p > 0) $ "∀" PP.<> ppBinding v tp <+> "→" <+> ppPrec 0 bd
+    ppPrec p (T.Lambda (T.LD v tp bd)) = parensIf (p > 0) $ "λ" PP.<> ppBinding v tp <+> "→" <+> ppPrec 0 bd
+    ppPrec p (T.ForAll (T.FD "" tp bd)) = parensIf (p > 4) $ ppPrec 5 tp <+> "⇒" <+> ppPrec 4 bd
+    ppPrec p (T.ForAll (T.FD v tp bd)) = parensIf (p > 0) $ "∀" PP.<> ppBinding v tp <+> "→" <+> ppPrec 0 bd
     ppPrec p (T.App l r) = parensIf (p > 5) $ ppPrec 5 l <+> ppPrec 6 r
 
 instance Pretty (TypingError Ast.Expr) where

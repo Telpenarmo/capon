@@ -84,17 +84,17 @@ intro name = wrap f
     f :: WrappedProover
     -- najpierw zredukuj
     f (env, g) ctx = case normalize g of
-        ForAll (FD (v, tp, bd)) ->
+        ForAll (FD v tp bd) ->
             return $ Incomplete (env', ass) (CAbs name tp ctx)
           where
-            ass = substitute v (Var $ V name 0) (normalize bd)
+            ass = substitute v (Var $ var name) (normalize bd)
             env' = extend env (name, tp)
         _ -> throwError ExpectedProduct
 
 unfoldApp :: Term -> Goal -> Context -> Proove Context
 unfoldApp arg (env, t) ctx = case arg of
     t' | t == t' -> return ctx -- arg może być typem zależnym
-    ForAll (FD (v, tp, bd)) -> do
+    ForAll (FD v tp bd) -> do
         newCtx <- unfoldApp bd (env, t) ctx
         return $ CApL newCtx $ Goal (env, tp) -- co z v? bd może je zawierać!
     _ -> throwError ExpectedPiOrGoal
@@ -102,7 +102,7 @@ unfoldApp arg (env, t) ctx = case arg of
 fill :: Term -> Context -> ProofStatus
 fill t ctx = case ctx of
     Root -> Complete t
-    CAbs v tp ctx' -> fill (Lambda $ LD (v, tp, t)) ctx'
+    CAbs v tp ctx' -> fill (Lambda $ LD v tp t) ctx'
     CApL ctx' pf -> case goUp ctx' pf of
         Complete t' -> fill (App t t') ctx'
         Incomplete g ctx'' -> Incomplete g $ CApR (Done t) ctx''
@@ -117,4 +117,4 @@ applyAssm name = wrap f
         Nothing -> throwError $ AssumptionNotFound name
         Just t' -> do
             newCtx <- unfoldApp t' g ctx
-            return $ fill (Var $ V name 0) newCtx
+            return $ fill (Var $ var name) newCtx

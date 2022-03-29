@@ -72,12 +72,12 @@ instance Checkable Ast.Expr where
             return (ForAll fd, Sort s)
         (Ast.App l r) -> appRule env l r
         (Ast.LetIn b e body) -> letInRule env b e body loc
-        (Ast.Error e) -> undefined 
+        (Ast.Error e) -> undefined
       where
         varRule :: Env -> Text -> AstInfer (Term, Term)
         varRule (Env env) v = case Map.lookup v env of
             Nothing -> throwError $ UnknownVar v
-            Just t -> return (Var (V v 0), t)
+            Just t -> return (Var (var v), t)
 
         sortRule :: Ast.Sort -> AstInfer (Sort, Sort)
         sortRule Ast.Prop = return (Prop, Type 1)
@@ -87,7 +87,7 @@ instance Checkable Ast.Expr where
         absRule env (Ast.Bind (v, arg)) body loc = do
             (at, _) <- inferSort env arg
             (bt, bd) <- infer (extend env (v, at)) body
-            return (LD (v, at, bt), FD (v, at, bd))
+            return (LD v at bt, FD v at bd)
 
         piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (FData, Sort)
         piRule env (Ast.Bind (v, arg)) body loc = do
@@ -100,11 +100,11 @@ instance Checkable Ast.Expr where
                         Prop -> ret' s
                         Type n' -> ret' $ Type $ max n n'
           where
-            ret a b s = return (FD (v, a, b), s)
+            ret a b s = return (FD v a b, s)
 
         appRule :: Env -> Ast.Expr -> Ast.Expr -> AstInfer (Term, Term)
         appRule env l r = do
-            (lt, FD (v, i, o)) <- inferPi env l
+            (lt, FD v i o) <- inferPi env l
             rt <- check env r i
             return (App lt rt, substitute v lt o)
 
@@ -125,9 +125,11 @@ instance Checkable Term where
         ForAll fd -> Sort <$> piRule env fd
       where
         varRule :: Env -> Var -> Infer Term Term
-        varRule (Env env) (V v _) = case Map.lookup v env of
-            Nothing -> throwError $ UnknownVar v
+        varRule (Env env) v = case Map.lookup x env of
+            Nothing -> throwError $ UnknownVar x
             Just t -> return t
+          where
+            x = name v
 
         sortRule :: Sort -> Infer Term Sort
         sortRule Prop = return $ Type 1
@@ -135,18 +137,18 @@ instance Checkable Term where
 
         appRule :: Env -> Term -> Term -> Infer Term Term
         appRule env l r = do
-            (lt, FD (v, i, o)) <- inferPi env l
+            (lt, FD v i o) <- inferPi env l
             rt <- check env r i
             return $ substitute v lt o
 
         absRule :: Env -> LData -> Infer Term FData
-        absRule env (LD (v, tp, body)) = do
+        absRule env (LD v tp body) = do
             (at, _) <- inferSort env tp
             (bt, bd) <- infer (extend env (v, at)) body
-            return $ FD (v, at, bd)
+            return $ FD v at bd
 
         piRule :: Env -> FData -> Infer Term Sort
-        piRule env (FD (v, tp, body)) = do
+        piRule env (FD v tp body) = do
             (at, as) <- inferSort env tp
             (bt, s) <- inferSort (extend env (v, at)) body
             case s of
