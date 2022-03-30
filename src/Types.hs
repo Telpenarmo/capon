@@ -3,21 +3,22 @@
 
 module Types (
   Term (..),
-  Env (..),
+  Env,
   Sort (..),
   LData (..),
   FData (..),
   Var,
   normalize,
+  eval,
   substitute,
-  emptyEnv,
-  extend,
   var,
   name,
 ) where
 
 import qualified Ast
+import qualified Context
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
 data Var = V Text Int deriving (Eq, Ord)
@@ -41,6 +42,8 @@ data Term
   | Lambda LData
   | ForAll FData
 
+type Env = Context.Context Term
+
 instance Eq Term where
   (==) = alpha []
    where
@@ -60,19 +63,27 @@ instance Eq Term where
       !nL' = if xL == xL' then nL - 1 else nL
       !nR' = if xR == xR' then nR - 1 else nR
 
+eval :: Env -> Term -> Term
+eval defs = \case
+  App f a ->
+    case go f of
+      Lambda (LD x tp body) -> go $ substitute x a body
+      f' -> App f' $ go a
+  Lambda (LD v t bd) -> Lambda $ LD v (go t) (go bd)
+  ForAll (FD v t bd) -> ForAll $ FD v (go t) (go bd)
+  Sort s -> Sort s
+  e@(Var (V x n)) -> fromMaybe e (Context.lookupDefinition x defs)
+ where
+  go = eval defs
+
 normalize :: Term -> Term
-normalize (App f a) = case normalize f of
-  Lambda (LD x tp body) -> normalize $ substitute x a body
-  f' -> App f' $ normalize a
-normalize (Lambda (LD v t bd)) = Lambda $ LD v (normalize t) (normalize bd)
-normalize (ForAll (FD v t bd)) = ForAll $ FD v (normalize t) (normalize bd)
-normalize (Sort s) = Sort s
-normalize (Var v) = Var v
+normalize = eval Context.empty
 
 subst :: Text -> Int -> Term -> Term -> Term
 subst x n arg = \case
   (Sort s) -> Sort s
-  e@(Var (V x' n')) -> if x == x' && n == n' then arg else e
+  Var (V x' n') | x == x' && n == n' -> arg
+  Var v | otherwise -> Var v
   App f a -> App (go f) (go a)
   Lambda (LD x' tp bd) -> Lambda $ LD x' tp' bd'
    where
@@ -89,15 +100,6 @@ subst x n arg = \case
 
 substitute :: Text -> Term -> Term -> Term
 substitute x arg = shift (-1) x . subst x 0 (shift 1 x arg)
-
-newtype Env = Env (Map.Map Text Term)
-
-emptyEnv :: Env
-emptyEnv = Env Map.empty
-extend :: Env -> (Text, Term) -> Env
-extend (Env env) (x, s) = Env (shift 1 x <$> Map.insert x s env)
-lookupEnv :: Env -> Text -> Maybe Term
-lookupEnv (Env env) v = Map.lookup v env
 
 shift :: Int -> Text -> Term -> Term
 shift d x e = go e 0

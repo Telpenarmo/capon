@@ -9,14 +9,12 @@
 module Typechecker (typecheck, TypingError (..), Infer, checkAgainst) where
 
 import qualified Ast
+import qualified Context
 import Control.Monad.Except
 import qualified Control.Monad.Except as Control.Monad
 import Control.Monad.State
-import qualified Data.Map as Map
 import Data.Text
 import Types
-
--- pattern A a b -> ()
 
 data TypingError a
     = UnknownVar Text
@@ -29,13 +27,12 @@ class Checkable a where
     -- type Infer t = Except InferenceError t
     infer :: Checkable a => Env -> a -> Infer a (Term, Term)
     check :: Checkable a => Env -> a -> Term -> Infer a Term
-    check env@(Env map) e tp = do
+    check env e tp = do
         (et, etp) <- infer env e
-        if normalize tp == normalize etp
+        if eval env tp == eval env etp
             then return et
             else throwError $ TypeMismatch e etp tp
-      where
-        substAll t = Map.foldrWithKey substitute t map
+
     inferSort :: Checkable a => Env -> a -> Infer a (Term, Sort)
     inferSort env e = do
         (t, tp) <- infer env e
@@ -51,15 +48,15 @@ class Checkable a where
             _ -> throwError $ ExpectedFunction e tp
 
 typecheck :: Checkable a => a -> Either (TypingError a) (Term, Term)
-typecheck = runExcept . infer emptyEnv
+typecheck = runExcept . infer Context.empty
 
 checkAgainst :: Checkable a => a -> Term -> Either (TypingError a) Term
-checkAgainst m = runExcept . check emptyEnv m
+checkAgainst m = runExcept . check Context.empty m
 
 type AstInfer a = Infer Ast.Expr a
 
 instance Checkable Ast.Expr where
-    infer env@(Env m) (e, loc) = case e of
+    infer env (e, loc) = case e of
         (Ast.Var v) -> varRule env v
         (Ast.Sort s) -> do
             (s, tp) <- sortRule s
@@ -75,7 +72,7 @@ instance Checkable Ast.Expr where
         (Ast.Error e) -> undefined
       where
         varRule :: Env -> Text -> AstInfer (Term, Term)
-        varRule (Env env) v = case Map.lookup v env of
+        varRule env v = case Context.lookupType v env of
             Nothing -> throwError $ UnknownVar v
             Just t -> return (Var (var v), t)
 
@@ -86,13 +83,13 @@ instance Checkable Ast.Expr where
         absRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (LData, FData)
         absRule env (Ast.Bind (v, arg)) body loc = do
             (at, _) <- inferSort env arg
-            (bt, bd) <- infer (extend env (v, at)) body
+            (bt, bd) <- infer (Context.insertAbstract v at env) body
             return (LD v at bt, FD v at bd)
 
         piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (FData, Sort)
         piRule env (Ast.Bind (v, arg)) body loc = do
             (at, as) <- inferSort env arg
-            (bt, s) <- inferSort (extend env (v, at)) body
+            (bt, s) <- inferSort (Context.insertAbstract v at env) body
             let ret' = ret at bt
              in case s of
                     Prop -> ret' Prop
@@ -112,8 +109,8 @@ instance Checkable Ast.Expr where
         -- let v:tp = arg in body === (\v:tp -> body) arg
         letInRule env (Ast.Bind (v, tp)) arg body loc = do
             (tp', _) <- inferSort env tp -- typ argumentu
-            (bt, btp) <- infer (extend env (v, tp')) body
             at <- check env arg tp' -- argument jako term
+            (bt, btp) <- infer (Context.insertDefined v at tp' env) body
             return (substitute v at bt, substitute v at btp)
 
 instance Checkable Term where
@@ -125,7 +122,7 @@ instance Checkable Term where
         ForAll fd -> Sort <$> piRule env fd
       where
         varRule :: Env -> Var -> Infer Term Term
-        varRule (Env env) v = case Map.lookup x env of
+        varRule env v = case Context.lookupType x env of
             Nothing -> throwError $ UnknownVar x
             Just t -> return t
           where
@@ -144,13 +141,13 @@ instance Checkable Term where
         absRule :: Env -> LData -> Infer Term FData
         absRule env (LD v tp body) = do
             (at, _) <- inferSort env tp
-            (bt, bd) <- infer (extend env (v, at)) body
+            (bt, bd) <- infer (Context.insertAbstract v at env) body
             return $ FD v at bd
 
         piRule :: Env -> FData -> Infer Term Sort
         piRule env (FD v tp body) = do
             (at, as) <- inferSort env tp
-            (bt, s) <- inferSort (extend env (v, at)) body
+            (bt, s) <- inferSort (Context.insertAbstract v at env) body
             case s of
                 Prop -> return Prop
                 Type n -> case as of

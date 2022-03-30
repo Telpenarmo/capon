@@ -3,6 +3,7 @@
 module Pretty (renderP, renderPLen, Pretty) where
 
 import qualified Ast
+import qualified Context
 import Control.Monad.Except (runExcept)
 import qualified Data.Map as Map
 import Data.Text (Text, unpack)
@@ -105,18 +106,17 @@ instance Pretty P.ProovingError where
         P.AssumptionNotFound v -> "The reference" <+> text (unpack v) <+> "was not found in the current environment."
         P.WrongProof -> "The proof is wrong."
 
-ppEnv :: P.Proof -> Doc
-ppEnv pf = vcat $ [text (unpack v) <+> ":" <+> pp t | (v, t) <- assumptions]
+ppEnv :: T.Env -> Doc
+ppEnv env = vcat $ [text (unpack v) <+> ":" <+> pp t | (v, t) <- assumptions]
   where
     assumptions :: [(Text, T.Term)]
-    assumptions = let (T.Env env) = P.assumptions pf in Map.toList env
-ppGoal :: P.Proof -> Doc
-ppGoal pf = pp goal
-  where
-    goal = P.consequence pf
+    assumptions = map (\(a, (tp, _)) -> (a, tp)) $ Context.toList env
 
 instance Pretty P.Proof where
-    ppPrec _ pf = if P.completed pf then "No more subgoals." else ppEnv pf $$ sizedText 50 (replicate 80 '=') $$ ppGoal pf
+    ppPrec _ pf =
+        if P.completed pf
+            then "No more subgoals."
+            else ppEnv (P.assumptions pf) $$ sizedText 50 (replicate 80 '=') $$ pp (P.consequence pf)
 
 instance Pretty ParsingError where ppPrec _ (PErr e) = text $ errorBundlePretty e
 

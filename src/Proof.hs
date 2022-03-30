@@ -11,6 +11,7 @@ module Proof (
     qed,
 ) where
 
+import qualified Context
 import Control.Monad.Except
 import qualified Data.Map as Map
 import Data.Text
@@ -82,13 +83,12 @@ intro :: Text -> Proover Proof
 intro name = wrap f
   where
     f :: WrappedProover
-    -- najpierw zredukuj
     f (env, g) ctx = case normalize g of
         ForAll (FD v tp bd) ->
             return $ Incomplete (env', ass) (CAbs name tp ctx)
           where
             ass = substitute v (Var $ var name) (normalize bd)
-            env' = extend env (name, tp)
+            env' = Context.insertAbstract name tp env
         _ -> throwError ExpectedProduct
 
 unfoldApp :: Term -> Goal -> Context -> Proove Context
@@ -113,7 +113,7 @@ fill t ctx = case ctx of
 applyAssm :: Text -> Proover Proof
 applyAssm name = wrap f
   where
-    f g@(Env env, t) ctx = case Map.lookup name env of
+    f g@(env, t) ctx = case Context.lookupType name env of
         Nothing -> throwError $ AssumptionNotFound name
         Just t' -> do
             newCtx <- unfoldApp t' g ctx

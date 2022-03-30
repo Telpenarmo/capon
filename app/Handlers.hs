@@ -1,6 +1,7 @@
 module Handlers (IState, handleNewProof, handleTactic, test) where
 
 import Console
+import qualified Context
 import Control.Monad.Except
 import Control.Monad.State (MonadState (put))
 import Data.Text (Text, pack)
@@ -9,7 +10,6 @@ import Proof
 import System.Console.ANSI (getTerminalSize)
 import TacticParser
 import Typechecker (typecheck)
-import Types (emptyEnv)
 
 type IState = Maybe Proof
 
@@ -46,9 +46,9 @@ handleTactic :: (MonadIO m, MonadState IState m) => Proof -> Text -> m ()
 handleTactic pf = parseTactic "tactic" >|> flip evalTactic pf
 
 handleNewProof :: (MonadIO m, MonadState IState m) => Text -> m ()
-handleNewProof = parseProof "theorem" >|> check >|> (updateState . proof emptyEnv . fst)
+handleNewProof = parseProof "theorem" >|> check >|> (updateState . proof Context.empty . fst)
  where
   check (InitProof e) = typecheck e
 
 test :: Text -> IO ()
-test = parseExpr "test" >|> typecheck >|> (liftIO . printP . fst)
+test = parseExpr "test" >|> typecheck >|> (liftIO . printP . snd)
