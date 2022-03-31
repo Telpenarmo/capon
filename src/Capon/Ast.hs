@@ -1,6 +1,6 @@
-module Ast where
+module Capon.Ast where
 
-import Data.Text ( Text )
+import Data.Text (Text)
 
 type Var = Text
 newtype Binding = Bind (Text, Expr)

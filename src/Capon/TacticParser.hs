@@ -1,16 +1,14 @@
-{-# LANGUAGE OverloadedStrings #-}
+module Capon.TacticParser (parseProof, parseTactic, Tactic (..), Command (..)) where
 
-module TacticParser(parseProof, parseTactic, Tactic(..), Command(..)) where
-
-import Data.Text ( Text )
+import Data.Bifunctor
+import Data.Text (Text)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Ast
-import Data.Bifunctor
-import Lexer
-import Parser
+import Capon.Ast
+import Capon.Lexer
+import Capon.Parser
 
 newtype Command = InitProof Expr
 data Tactic = Intro Text | Apply Text | Rewrite Text | Qed

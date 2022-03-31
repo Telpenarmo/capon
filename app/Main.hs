@@ -1,8 +1,6 @@
 module Main (main) where
 
-import qualified Ast
 import Console
-import qualified Context
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Text (Text, pack)
@@ -10,6 +8,9 @@ import Handlers
 import System.Console.Repline
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
+
+import qualified Capon.Ast as Ast
+import qualified Capon.Context as Context
 
 type Repl a = HaskelineT (StateT IState IO) a
 

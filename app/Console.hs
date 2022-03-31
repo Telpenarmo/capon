@@ -3,8 +3,9 @@ module Console where
 import Control.Monad.Except (MonadIO, liftIO)
 import Data.Char (toLower)
 import Data.List (isPrefixOf)
-import Pretty (Pretty, renderP)
 import System.Console.ANSI
+
+import Capon.Pretty (Pretty, renderP)
 
 (|>>) :: (Pretty e, MonadIO m) => Either e a -> (a -> m ()) -> m ()
 e |>> cont = either (liftIO . printError) cont e

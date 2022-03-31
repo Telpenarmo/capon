@@ -1,11 +1,11 @@
-module Context (
+module Capon.Context (
     Context,
     empty,
     insertAbstract,
     insertDefined,
     lookupType,
     lookupDefinition,
-    toList
+    toList,
 ) where
 
 import qualified Data.Map as Map

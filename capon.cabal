@@ -5,21 +5,27 @@ license:            MIT
 license-file:       LICENSE
 maintainer:         telpenarmo@protonmail.com
 author:             Telpenarmo
-synopsis:           CoC-driven proof assistant written in Haskell
-extra-source-files: CHANGELOG.md
+synopsis:           CoC-driven proof assistant
+extra-doc-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+    type: git
+    location: git://github.com/Telpenarmo/capon.git
 
 library
     exposed-modules:
-        Ast,
-        Parser,
-        TacticParser,
-        Context,
-        Types,
-        Typechecker,
-        Proof,
-        Pretty
+        Capon.Ast,
+        Capon.Parser,
+        Capon.TacticParser,
+        Capon.Context,
+        Capon.Types,
+        Capon.Typechecker,
+        Capon.Proof,
+        Capon.Pretty
     other-modules:
-        Lexer
+        Capon.Lexer
     hs-source-dirs:   src
     default-language: Haskell2010
     default-extensions:
@@ -28,11 +34,11 @@ library
         LambdaCase
     build-depends:
         base >=4.14.2.0 && <=4.17,
-        containers,
-        mtl,
-        text,
+        containers >= 0.6.4 && <= 0.6.5,
+        mtl >= 2.2 && <= 2.3,
+        text >= 1.2.4 && <= 1.3,
         megaparsec >=9.2 && <=9.3,
-        pretty,
+        pretty >= 1.1.3 && <= 1.2,
         parser-combinators >=1.3
 
 executable capon

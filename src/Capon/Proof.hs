@@ -1,4 +1,4 @@
-module Proof (
+module Capon.Proof (
     Proof,
     Proove (..),
     ProovingError (..),
@@ -11,12 +11,13 @@ module Proof (
     qed,
 ) where
 
-import qualified Context
 import Control.Monad.Except
 import qualified Data.Map as Map
 import Data.Text
-import Typechecker (checkAgainst)
-import Types
+
+import qualified Capon.Context as Context
+import Capon.Typechecker (checkAgainst)
+import Capon.Types
 
 type Goal = (Env, Term)
 data ProofTree

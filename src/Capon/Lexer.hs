@@ -1,6 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
-
-module Lexer where
+module Capon.Lexer where
 
 import Data.Char (isAlphaNum)
 import Data.Text (Text, pack)

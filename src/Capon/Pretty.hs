@@ -1,19 +1,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Pretty (renderP, renderPLen, Pretty) where
+module Capon.Pretty (renderP, renderPLen, Pretty) where
 
-import qualified Ast
-import qualified Context
 import Control.Monad.Except (runExcept)
 import qualified Data.Map as Map
 import Data.Text (Text, unpack)
 import Data.Void (Void)
-import Lexer (ParsingError (PErr))
-import qualified Proof as P
 import Text.Megaparsec (ParseErrorBundle, errorBundlePretty)
 import Text.PrettyPrint as PP
-import Typechecker (TypingError (..))
-import qualified Types as T
+
+import qualified Capon.Ast as Ast
+import qualified Capon.Context as Context
+import Capon.Lexer (ParsingError (PErr))
+import qualified Capon.Proof as P
+import Capon.Typechecker (TypingError (..))
+import qualified Capon.Types as T
 
 class Pretty p where
     ppPrec :: Int -> p -> Doc

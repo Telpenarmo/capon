@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
 
-module Types (
+module Capon.Types (
   Term (..),
   Env,
   Sort (..),
@@ -15,11 +14,12 @@ module Types (
   name,
 ) where
 
-import qualified Ast
-import qualified Context
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
+
+import qualified Capon.Ast as Ast
+import qualified Capon.Context as Context
 
 data Var = V Text Int deriving (Eq, Ord)
 name :: Var -> Text

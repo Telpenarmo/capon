@@ -1,20 +1,16 @@
 {-# LANGUAGE ConstrainedClassMethods #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
 
--- {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+module Capon.Typechecker (typecheck, TypingError (..), Infer, checkAgainst) where
 
-module Typechecker (typecheck, TypingError (..), Infer, checkAgainst) where
-
-import qualified Ast
-import qualified Context
 import Control.Monad.Except
-import qualified Control.Monad.Except as Control.Monad
-import Control.Monad.State
 import Data.Text
-import Types
+
+import qualified Capon.Ast as Ast
+import qualified Capon.Context as Context
+import Capon.Types
 
 data TypingError a
     = UnknownVar Text

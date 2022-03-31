@@ -10,16 +10,17 @@ module Handlers (
 ) where
 
 import Console
-import qualified Context
 import Control.Monad.Except
 import Control.Monad.State (MonadState (get, put))
 import Data.Text (Text, pack)
-import Parser (parseExpr)
-import Proof
 import System.Console.ANSI (getTerminalSize)
-import TacticParser
-import Typechecker (typecheck)
-import Types (Env, Term)
+
+import qualified Capon.Context as Context
+import Capon.Parser (parseExpr)
+import Capon.Proof
+import Capon.TacticParser
+import Capon.Typechecker (typecheck)
+import Capon.Types (Env, Term)
 
 type IState = (Env, Maybe Proof)
 
