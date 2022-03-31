@@ -13,6 +13,7 @@ library
         Ast,
         Parser,
         TacticParser,
+        Context,
         Types,
         Typechecker,
         Proof,

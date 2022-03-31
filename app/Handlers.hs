@@ -1,33 +1,64 @@
-module Handlers (IState, handleNewProof, handleTactic, test) where
+module Handlers (
+  IState,
+  handleNewProof,
+  handleTactic,
+  test,
+  getEnv,
+  getProof,
+  putProof,
+  resetProof,
+) where
 
 import Console
 import qualified Context
 import Control.Monad.Except
-import Control.Monad.State (MonadState (put))
+import Control.Monad.State (MonadState (get, put))
 import Data.Text (Text, pack)
 import Parser (parseExpr)
 import Proof
 import System.Console.ANSI (getTerminalSize)
 import TacticParser
 import Typechecker (typecheck)
+import Types (Env, Term)
 
-type IState = Maybe Proof
+type IState = (Env, Maybe Proof)
 
-updateState :: (MonadIO m, MonadState IState m) => Proof -> m ()
-updateState pf = do
-  put $ Just pf
+getEnv :: MonadState IState m => m Env
+getEnv = get >>= pure <$> fst
+
+setEnv :: (MonadIO m, MonadState IState m) => Env -> m ()
+setEnv env = do
+  (_, pf) <- get
+  put (env, pf)
+
+getProof :: MonadState IState m => m (Maybe Proof)
+getProof = get >>= pure <$> snd
+
+putProof :: MonadState IState m => Proof -> m ()
+putProof pf = do
+  (env, _) <- get
+  put (env, Just pf)
+
+resetProof :: MonadState IState m => m ()
+resetProof = do
+  (env, _) <- get
+  put (env, Nothing)
+
+updateProof :: (MonadIO m, MonadState IState m) => Proof -> m ()
+updateProof pf = do
+  putProof pf
   liftIO $ displayProof pf
 
 evalTactic :: (MonadIO m, MonadState IState m) => Tactic -> Proof -> m ()
 evalTactic = eval
  where
-  eval (Intro n) = updateProof . intro n
-  eval (Apply n) = updateProof . applyAssm n
+  eval (Intro n) = update . intro n
+  eval (Apply n) = update . applyAssm n
   eval (Rewrite n) = error "not implemented"
   eval Qed = (runExcept >|> finish) . qed
-  updateProof = runExcept >|> updateState
+  update = runExcept >|> updateProof
   finish t = do
-    put Nothing
+    resetProof
     liftIO $ putStr "Proof: " >> printSuccess t
 
 displayProof :: Proof -> IO ()
@@ -36,19 +67,16 @@ displayProof pf = do
   putStrLn $ replicate times '\n'
   printP pf
  where
-  height = do
-    i <- getTerminalSize
-    case i of
-      Nothing -> return 5
-      Just (h, _) -> return $ h `div` 2
+  height = maybe 5 ((`div` 2) . fst) <$> getTerminalSize
 
 handleTactic :: (MonadIO m, MonadState IState m) => Proof -> Text -> m ()
 handleTactic pf = parseTactic "tactic" >|> flip evalTactic pf
 
 handleNewProof :: (MonadIO m, MonadState IState m) => Text -> m ()
-handleNewProof = parseProof "theorem" >|> check >|> (updateState . proof Context.empty . fst)
+handleNewProof = parseProof "theorem" >|> check >|> (go . fst)
  where
   check (InitProof e) = typecheck e
+  go t = getEnv >>= updateProof . flip proof t
 
 test :: Text -> IO ()
 test = parseExpr "test" >|> typecheck >|> (liftIO . printP . snd)

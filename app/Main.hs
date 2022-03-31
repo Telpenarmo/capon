@@ -2,6 +2,7 @@ module Main (main) where
 
 import qualified Ast
 import Console
+import qualified Context
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Text (Text, pack)
@@ -14,13 +15,13 @@ type Repl a = HaskelineT (StateT IState IO) a
 
 prompt :: MultiLine -> Repl String
 prompt = \case
-  MultiLine -> pure ":"
-  SingleLine -> get >>= pure <$> maybe ">>> " (const "prooving > ")
+  MultiLine -> pure ": "
+  SingleLine -> getProof >>= pure <$> maybe ">>> " (const "prooving > ")
 
 cmd :: String -> Repl ()
 cmd s = do
-  st <- get
-  maybe handleNewProof handleTactic st $ pack s
+  pf <- getProof
+  maybe handleNewProof handleTactic pf $ pack s
 
 help :: String -> IO ()
 help args =
@@ -51,8 +52,8 @@ completer n = return ["foo"]
 
 final :: Repl ExitDecision
 final = do
-  st <- get
-  case st of
+  pf <- getProof
+  case pf of
     Nothing -> exit
     Just pr -> do
       liftIO $ putStr "You have an unfinished proof. Are you sure?"
@@ -63,7 +64,7 @@ final = do
 
 main :: IO ()
 main =
-  flip evalStateT Nothing $ evalReplOpts ropts
+  flip evalStateT (Context.empty, Nothing) $ evalReplOpts ropts
  where
   ropts =
     ReplOpts
