@@ -9,10 +9,10 @@ import Data.Void (Void)
 import Text.Megaparsec (ParseErrorBundle, errorBundlePretty)
 import Text.PrettyPrint as PP
 
-import qualified Capon.Ast as Ast
 import qualified Capon.Context as Context
-import Capon.Lexer (ParsingError (PErr))
 import qualified Capon.Proof as P
+import qualified Capon.Syntax.Ast as Ast
+import Capon.Syntax.Lexer (ParsingError (PErr))
 import Capon.Typechecker (TypingError (..))
 import qualified Capon.Types as T
 

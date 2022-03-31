@@ -16,9 +16,9 @@ import Data.Text (Text, pack)
 import System.Console.ANSI (getTerminalSize)
 
 import qualified Capon.Context as Context
-import Capon.Parser (parseExpr)
 import Capon.Proof
-import Capon.TacticParser
+import Capon.Syntax.Parser (parseExpr)
+import Capon.Syntax.TacticParser
 import Capon.Typechecker (typecheck)
 import Capon.Types (Env, Term)
 

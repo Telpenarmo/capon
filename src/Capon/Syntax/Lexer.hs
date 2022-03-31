@@ -1,4 +1,4 @@
-module Capon.Lexer where
+module Capon.Syntax.Lexer where
 
 import Data.Char (isAlphaNum)
 import Data.Text (Text, pack)

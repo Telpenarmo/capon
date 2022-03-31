@@ -9,8 +9,8 @@ import System.Console.Repline
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 
-import qualified Capon.Ast as Ast
 import qualified Capon.Context as Context
+import qualified Capon.Syntax.Ast as Ast
 
 type Repl a = HaskelineT (StateT IState IO) a
 

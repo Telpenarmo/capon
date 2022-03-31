@@ -18,8 +18,8 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
-import qualified Capon.Ast as Ast
 import qualified Capon.Context as Context
+import qualified Capon.Syntax.Ast as Ast
 
 data Var = V Text Int deriving (Eq, Ord)
 name :: Var -> Text

@@ -1,4 +1,9 @@
-module Capon.TacticParser (parseProof, parseTactic, Tactic (..), Command (..)) where
+module Capon.Syntax.TacticParser (
+  parseProof,
+  parseTactic,
+  Tactic (..),
+  Command (..),
+) where
 
 import Data.Bifunctor
 import Data.Text (Text)
@@ -6,9 +11,9 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Capon.Ast
-import Capon.Lexer
-import Capon.Parser
+import Capon.Syntax.Ast
+import Capon.Syntax.Lexer
+import Capon.Syntax.Parser
 
 newtype Command = InitProof Expr
 data Tactic = Intro Text | Apply Text | Rewrite Text | Qed

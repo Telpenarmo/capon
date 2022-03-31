@@ -1,4 +1,4 @@
-module Capon.Parser (parseExpr, pExpr) where
+module Capon.Syntax.Parser (parseExpr, pExpr) where
 
 import Control.Monad.Combinators.Expr
 import Data.Bifunctor (Bifunctor (first))
@@ -7,8 +7,8 @@ import Data.Text (Text, pack)
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Capon.Ast
-import Capon.Lexer
+import Capon.Syntax.Ast
+import Capon.Syntax.Lexer
 
 type EParser = Parser ExprData
 

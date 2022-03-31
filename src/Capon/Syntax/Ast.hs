@@ -1,4 +1,4 @@
-module Capon.Ast where
+module Capon.Syntax.Ast where
 
 import Data.Text (Text)
 

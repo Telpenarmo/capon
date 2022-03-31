@@ -8,8 +8,8 @@ module Capon.Typechecker (typecheck, TypingError (..), Infer, checkAgainst) wher
 import Control.Monad.Except
 import Data.Text
 
-import qualified Capon.Ast as Ast
 import qualified Capon.Context as Context
+import qualified Capon.Syntax.Ast as Ast
 import Capon.Types
 
 data TypingError a

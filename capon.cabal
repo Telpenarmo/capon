@@ -16,16 +16,16 @@ source-repository head
 
 library
     exposed-modules:
-        Capon.Ast,
-        Capon.Parser,
-        Capon.TacticParser,
+        Capon.Syntax.Ast,
+        Capon.Syntax.Parser,
+        Capon.Syntax.TacticParser,
         Capon.Context,
         Capon.Types,
         Capon.Typechecker,
         Capon.Proof,
         Capon.Pretty
     other-modules:
-        Capon.Lexer
+        Capon.Syntax.Lexer
     hs-source-dirs:   src
     default-language: Haskell2010
     default-extensions:
