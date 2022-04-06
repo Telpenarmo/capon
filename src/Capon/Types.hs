@@ -105,12 +105,12 @@ shift :: Int -> Text -> Term -> Term
 shift d x e = go e 0
  where
   go e lev = case e of
-    Lambda (LD x' tp bd) -> Lambda $ LD x' (go tp lev') (go bd lev)
+    Lambda (LD x' tp bd) -> Lambda $ LD x' (go tp lev) (go bd lev')
      where
       !lev' = if x == x' then lev + 1 else lev
-    ForAll (FD x' tp bd) -> ForAll $ FD x' (go tp c') (go bd lev)
+    ForAll (FD x' tp bd) -> ForAll $ FD x' (go tp lev) (go bd lev')
      where
-      !c' = if x == x' then lev + 1 else lev
+      !lev' = if x == x' then lev + 1 else lev
     App f a -> App (go f lev) (go a lev)
     Var (V x' n) -> Var $ V x' n'
      where
