@@ -44,10 +44,10 @@ class Checkable a where
             _ -> throwError $ ExpectedFunction e tp
 
 typecheck :: Checkable a => a -> Either (TypingError a) (Term, Term)
-typecheck = runExcept . infer Context.empty
+typecheck = runExcept . infer emptyEnv
 
 checkAgainst :: Checkable a => a -> Term -> Either (TypingError a) Term
-checkAgainst m = runExcept . check Context.empty m
+checkAgainst m = runExcept . check emptyEnv m
 
 type AstInfer a = Infer Ast.Expr a
 

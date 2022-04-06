@@ -11,6 +11,7 @@ import System.Exit (exitSuccess)
 
 import qualified Capon.Context as Context
 import qualified Capon.Syntax.Ast as Ast
+import Capon.Types (emptyEnv)
 
 type Repl a = HaskelineT (StateT IState IO) a
 
@@ -65,7 +66,7 @@ final = do
 
 main :: IO ()
 main =
-  flip evalStateT (Context.empty, Nothing) $ evalReplOpts ropts
+  flip evalStateT (emptyEnv, Nothing) $ evalReplOpts ropts
  where
   ropts =
     ReplOpts

@@ -12,6 +12,7 @@ module Capon.Types (
   substitute,
   var,
   name,
+  emptyEnv,
 ) where
 
 import qualified Data.Map as Map
@@ -43,6 +44,9 @@ data Term
   | ForAll FData
 
 type Env = Context.Context Term
+
+emptyEnv :: Env
+emptyEnv = Context.empty (shift 1)
 
 instance Eq Term where
   (==) = alpha []
@@ -77,7 +81,7 @@ eval defs = \case
   go = eval defs
 
 normalize :: Term -> Term
-normalize = eval Context.empty
+normalize = eval emptyEnv
 
 subst :: Text -> Int -> Term -> Term -> Term
 subst x n arg = \case
