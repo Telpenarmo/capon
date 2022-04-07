@@ -93,7 +93,16 @@ instance Pretty (TypingError Ast.Expr) where
     ppPrec _ (ExpectedFunction (actual, loc) tp) =
         pp loc PP.<> ":" <+> "Expression" <+> cite actual <+> "is not a function and cannot be applied."
     ppPrec _ (ExpectedType (actual, loc) tp) =
-        pp loc PP.<> ":" <+> "Expression" <+> cite actual <+> "is not a type."
+        pp loc PP.<> ":" <+> "Expression" <+> cite actual <+> "has type" <+> pp tp <+> "but a sort was expected."
+
+instance Pretty (TypingError T.Term) where
+    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text (unpack v)
+    ppPrec _ (TypeMismatch e actual expected) =
+        "Expression " <+> cite e <+> "has type" <+> cite actual <+> "but" <+> cite expected <+> "was expected."
+    ppPrec _ (ExpectedFunction actual tp) =
+        "Expression" <+> cite actual <+> "is not a function and cannot be applied."
+    ppPrec _ (ExpectedType actual tp) =
+        "Expression" <+> cite actual <+> "has type" <+> pp tp <+> "but a sort was expected."
 
 cite :: Pretty a => a -> Doc
 cite = quotes . pp
@@ -103,9 +112,10 @@ instance Pretty P.ProovingError where
         P.NoMoreGoals -> "Proof is not yet complete."
         P.GoalLeft -> "Proof is already complete."
         P.ExpectedProduct -> "No product even after reduction."
-        P.ExpectedPiOrGoal -> "Invalid application."
+        P.ExpectedPiOrGoal t -> "Invalid application of" <+> pp t
         P.AssumptionNotFound v -> "The reference" <+> text (unpack v) <+> "was not found in the current environment."
-        P.WrongProof -> "The proof is wrong."
+        P.WrongProof err -> "The proof is wrong:" <+> pp err
+        P.ExpectedProp err -> "Typechecker failed with following error:" $$ pp err
 
 ppEnv :: T.Env -> Doc
 ppEnv env = vcat $ [text (unpack v) <+> ":" <+> pp t | (v, t) <- assumptions]

@@ -16,7 +16,8 @@ import qualified Data.Map as Map
 import Data.Text
 
 import qualified Capon.Context as Context
-import Capon.Typechecker (checkAgainst)
+import Capon.Syntax.Ast (Expr)
+import Capon.Typechecker (TypingError, checkAgainst)
 import Capon.Types
 
 type Goal = (Env, Term)
@@ -39,9 +40,10 @@ data ProovingError
     = NoMoreGoals
     | GoalLeft
     | ExpectedProduct
-    | ExpectedPiOrGoal
+    | ExpectedPiOrGoal Term
     | AssumptionNotFound Text
-    | WrongProof
+    | WrongProof (TypingError Term)
+    | ExpectedProp (TypingError Expr)
 
 type Proove a = Except ProovingError a
 
@@ -51,8 +53,10 @@ wrap :: WrappedProover -> Proof -> Proove Proof
 wrap f (P (_, Complete _)) = throwError NoMoreGoals
 wrap f (P (m, Incomplete g ctx)) = f g ctx >>= (\s -> return $ P (m, s))
 
-proof :: Env -> Term -> Proof
-proof env t = P (t, Incomplete (env, t) Root)
+proof :: Env -> Expr -> Proove Proof
+proof env e = case checkAgainst e (Sort Prop) of
+    Left err -> throwError $ ExpectedProp err
+    Right t -> pure $ P (t, Incomplete (env, t) Root)
 
 assumptions :: Proof -> Env
 assumptions (P (_, Complete _)) = error "proof completed"
@@ -67,7 +71,7 @@ completed (P (_, Incomplete _ _)) = False
 
 qed :: Proof -> Proove Term
 qed (P (g, Complete t)) = case checkAgainst t g of
-    Left err -> throwError WrongProof
+    Left err -> throwError $ WrongProof err
     Right te -> return te
 qed (P (_, Incomplete _ _)) = throwError GoalLeft
 
@@ -94,11 +98,11 @@ intro name = wrap f
 
 unfoldApp :: Term -> Goal -> Context -> Proove Context
 unfoldApp arg (env, t) ctx = case arg of
-    t' | t == t' -> return ctx -- arg może być typem zależnym
+    t' | eval env t == eval env t' -> return ctx -- arg może być typem zależnym
     ForAll (FD v tp bd) -> do
         newCtx <- unfoldApp bd (env, t) ctx
         return $ CApL newCtx $ Goal (env, tp) -- co z v? bd może je zawierać!
-    _ -> throwError ExpectedPiOrGoal
+    _ -> throwError $ ExpectedPiOrGoal arg
 
 fill :: Term -> Context -> ProofStatus
 fill t ctx = case ctx of
