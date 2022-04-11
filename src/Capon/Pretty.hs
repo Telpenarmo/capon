@@ -13,6 +13,7 @@ import qualified Capon.Context as Context
 import qualified Capon.Proof as P
 import qualified Capon.Syntax.Ast as Ast
 import Capon.Syntax.Lexer (ParsingError (PErr))
+import qualified Capon.Syntax.Stmt as Stmt
 import Capon.Typechecker (TypingError (..))
 import qualified Capon.Types as T
 
@@ -116,6 +117,12 @@ instance Pretty P.ProovingError where
         P.AssumptionNotFound v -> "The reference" <+> text (unpack v) <+> "was not found in the current environment."
         P.WrongProof err -> "The proof is wrong:" <+> pp err
         P.ExpectedProp err -> "Typechecker failed with following error:" $$ pp err
+
+instance Pretty Stmt.EngineError where
+    ppPrec _ = \case
+        Stmt.NoProof -> "No active proof."
+        Stmt.ActiveProof -> "You have an unfinished proof."
+        Stmt.ProovingErr err -> pp err
 
 ppEnv :: T.Env -> Doc
 ppEnv env = vcat $ [text (unpack v) <+> ":" <+> pp t | (v, t) <- assumptions]

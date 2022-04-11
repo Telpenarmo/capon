@@ -18,8 +18,10 @@ library
     exposed-modules:
         Capon.Syntax.Ast,
         Capon.Syntax.Parser,
-        Capon.Syntax.TacticParser,
+        Capon.Syntax.Stmt,
+        Capon.Syntax.StmtParser,
         Capon.Context,
+        Capon.Engine,
         Capon.Types,
         Capon.Typechecker,
         Capon.Proof,

@@ -21,9 +21,7 @@ prompt = \case
   SingleLine -> getProof >>= pure <$> maybe ">>> " (const "prooving > ")
 
 cmd :: String -> Repl ()
-cmd s = do
-  pf <- getProof
-  maybe handleNewProof handleTactic pf $ pack s
+cmd = handleCommand . pack
 
 help :: String -> IO ()
 help args =
