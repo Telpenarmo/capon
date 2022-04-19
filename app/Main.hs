@@ -18,7 +18,9 @@ type Repl a = HaskelineT (StateT IState IO) a
 prompt :: MultiLine -> Repl String
 prompt = \case
   MultiLine -> pure ": "
-  SingleLine -> getProof >>= pure <$> maybe ">>> " (const "prooving > ")
+  SingleLine -> do
+    (_, pf) <- get
+    pure $ maybe ">>> " (const "prooving > ") pf
 
 cmd :: String -> Repl ()
 cmd = handleCommand . pack
@@ -52,7 +54,7 @@ completer n = return ["foo"]
 
 final :: Repl ExitDecision
 final = do
-  pf <- getProof
+  (_, pf) <- get
   case pf of
     Nothing -> exit
     Just pr -> do
