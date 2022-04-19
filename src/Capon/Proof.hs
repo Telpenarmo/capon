@@ -1,6 +1,6 @@
 module Capon.Proof (
     Proof,
-    Proove (..),
+    Result (..),
     ProovingError (..),
     completed,
     assumptions,
@@ -11,13 +11,11 @@ module Capon.Proof (
     qed,
 ) where
 
-import Control.Monad.Except
-import qualified Data.Map as Map
-import Data.Text
+import Data.Text (Text)
 
 import qualified Capon.Context as Context
 import Capon.Syntax.Ast (Expr)
-import Capon.Typechecker (TypingError, checkAgainst)
+import Capon.Typechecker (TypingError, checkAgainst, typecheck, typecheckWith)
 import Capon.Types
 
 type Goal = (Env, Term)
@@ -33,8 +31,8 @@ data Context
     | CApR ProofTree Context
     | CAbs Text Term Context
 
-data ProofStatus = Complete Term | Incomplete Goal Context
-newtype Proof = P (Term, ProofStatus)
+data ProofState = Complete Term | Incomplete Goal Context
+newtype Proof = P (Term, ProofState)
 
 data ProovingError
     = NoMoreGoals
@@ -45,17 +43,13 @@ data ProovingError
     | WrongProof (TypingError Term)
     | ExpectedProp (TypingError Expr)
 
-type Proove a = Except ProovingError a
+type Result a = Either ProovingError a
 
-type Proover a = Proof -> Proove a
-type WrappedProover = Goal -> Context -> Proove ProofStatus
-wrap :: WrappedProover -> Proof -> Proove Proof
-wrap f (P (_, Complete _)) = throwError NoMoreGoals
-wrap f (P (m, Incomplete g ctx)) = f g ctx >>= (\s -> return $ P (m, s))
+type Proove a = Proof -> Result a
 
-proof :: Env -> Expr -> Proove Proof
+proof :: Env -> Expr -> Result Proof
 proof env e = case checkAgainst e (Sort Prop) of
-    Left err -> throwError $ ExpectedProp err
+    Left err -> Left $ ExpectedProp err
     Right t -> pure $ P (t, Incomplete (env, t) Root)
 
 assumptions :: Proof -> Env
@@ -69,13 +63,13 @@ completed :: Proof -> Bool
 completed (P (_, Complete _)) = True
 completed (P (_, Incomplete _ _)) = False
 
-qed :: Proof -> Proove Term
+qed :: Proove Term
 qed (P (g, Complete t)) = case checkAgainst t g of
-    Left err -> throwError $ WrongProof err
+    Left err -> Left $ WrongProof err
     Right te -> return te
-qed (P (_, Incomplete _ _)) = throwError GoalLeft
+qed (P (_, Incomplete _ _)) = Left GoalLeft
 
-goUp :: Context -> ProofTree -> ProofStatus
+goUp :: Context -> ProofTree -> ProofState
 goUp ctx pf = case pf of
     Done te -> Complete te
     Goal g -> Incomplete g ctx
@@ -84,27 +78,30 @@ goUp ctx pf = case pf of
         Complete t -> goUp (CApR l ctx) r
         inc -> inc
 
-intro :: Text -> Proover Proof
-intro name = wrap f
+withGoal :: (Goal -> Context -> Result ProofState) -> Proove Proof
+withGoal f (P (_, Complete _)) = Left NoMoreGoals
+withGoal f (P (m, Incomplete g ctx)) = f g ctx >>= (\s -> return $ P (m, s))
+
+intro :: Text -> Proove Proof
+intro name = withGoal doIntro
   where
-    f :: WrappedProover
-    f (env, g) ctx = case normalize g of
+    doIntro (env, g) ctx = case normalize g of
         ForAll (FD v tp bd) ->
             return $ Incomplete (env', ass) (CAbs name tp ctx)
           where
             ass = substitute v (Var $ var name) (normalize bd)
             env' = Context.insertAbstract name tp env
-        _ -> throwError ExpectedProduct
+        _ -> Left ExpectedProduct
 
-unfoldApp :: Term -> Goal -> Context -> Proove Context
+unfoldApp :: Term -> Goal -> Context -> Result Context
 unfoldApp arg (env, t) ctx = case arg of
     t' | eval env t == eval env t' -> return ctx -- arg może być typem zależnym
     ForAll (FD v tp bd) -> do
         newCtx <- unfoldApp bd (env, t) ctx
         return $ CApL newCtx $ Goal (env, tp) -- co z v? bd może je zawierać!
-    _ -> throwError $ ExpectedPiOrGoal arg
+    _ -> Left $ ExpectedPiOrGoal t
 
-fill :: Term -> Context -> ProofStatus
+fill :: Term -> Context -> ProofState
 fill t ctx = case ctx of
     Root -> Complete t
     CAbs v tp ctx' -> fill (Lambda $ LD v tp t) ctx'
@@ -115,11 +112,13 @@ fill t ctx = case ctx of
         Complete t' -> fill (App t' t) ctx'
         Incomplete g ctx'' -> Incomplete g $ CApL ctx'' $ Done t
 
-applyAssm :: Text -> Proover Proof
-applyAssm name = wrap f
+applyAssm :: Text -> Proove Proof
+applyAssm name = withGoal doApply
   where
-    f g@(env, t) ctx = case Context.lookupType name env of
-        Nothing -> throwError $ AssumptionNotFound name
+    doApply g@(env, t) ctx = case Context.lookupType name env of
+        Nothing -> Left $ AssumptionNotFound name
         Just t' -> do
             newCtx <- unfoldApp t' g ctx
-            return $ fill (Var $ var name) newCtx
+            return $ fill v newCtx
+      where
+        v = Var $ var name
