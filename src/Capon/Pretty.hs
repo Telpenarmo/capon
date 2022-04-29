@@ -7,7 +7,8 @@ import qualified Data.Map as Map
 import Data.Text (Text, unpack)
 import Data.Void (Void)
 import Text.Megaparsec (ParseErrorBundle, errorBundlePretty)
-import Text.PrettyPrint as PP
+import Text.PrettyPrint hiding (text)
+import qualified Text.PrettyPrint as PP
 
 import qualified Capon.Context as Context
 import qualified Capon.Proof as P
@@ -30,25 +31,28 @@ renderP :: Pretty a => a -> String
 renderP = renderPLen 60
 
 instance Pretty String where
-    ppPrec _ s = text s
+    ppPrec _ s = string s
 
 parensIf :: Bool -> Doc -> Doc
 parensIf True = parens
 parensIf False = id
 
+string = PP.text
+text = string . unpack
+
 ppBinding :: Pretty p => Text -> p -> Doc
-ppBinding n tp = parens $ text (unpack n) PP.<> ":" <+> ppPrec 0 tp
+ppBinding n tp = parens $ text n PP.<> ":" <+> ppPrec 0 tp
 
 instance Show Ast.Location where
     show (Ast.Location l c f) = unpack f ++ ":" ++ show l ++ ":" ++ show c
 
-instance Pretty Ast.Location where ppPrec _ = text . show
+instance Pretty Ast.Location where ppPrec _ = string . show
 
 instance Pretty Ast.Binding where
     ppPrec p (Ast.Bind (n, tp)) = ppBinding n tp
 
 instance Pretty Ast.ExprData where
-    ppPrec _ (Ast.Var t) = text $ unpack t
+    ppPrec _ (Ast.Var t) = text t
     ppPrec _ (Ast.Sort Ast.Prop) = "Prop"
     ppPrec _ (Ast.Sort (Ast.Type i)) = "Type" <+> int i
     ppPrec p (Ast.Lambda b bd) = parensIf (p > 0) $ hang ("λ" PP.<> ppPrec 0 b <+> "→") 2 (ppPrec 0 bd)
@@ -57,7 +61,7 @@ instance Pretty Ast.ExprData where
     ppPrec p (Ast.App l r) = parensIf (p > 5) $ ppPrec 5 l <+> ppPrec 6 r
     ppPrec p (Ast.LetIn (Ast.Bind (n, tp)) e1 e2) =
         parensIf (p > 0) $ hang ("let" <+> (pp . unpack $ n) <+> "=" <+> ppPrec 0 e1 <+> "in") 2 (ppPrec 0 e2)
-    ppPrec _ (Ast.Error t) = "Error" <+> text (unpack t)
+    ppPrec _ (Ast.Error t) = "Error" <+> text t
 
 instance Pretty Ast.Expr where ppPrec n (e, _) = ppPrec n e
 
@@ -76,7 +80,7 @@ viewApp e1 e2 = go e1 [e2]
     go f xs = (f, xs)
 
 instance Pretty T.Var where
-    ppPrec _ = text . show
+    ppPrec _ = string . show
 
 instance Pretty T.Term where
     ppPrec _ (T.Var v) = pp v
@@ -88,7 +92,7 @@ instance Pretty T.Term where
     ppPrec p (T.App l r) = parensIf (p > 5) $ ppPrec 5 l <+> ppPrec 6 r
 
 instance Pretty (TypingError Ast.Expr) where
-    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text (unpack v)
+    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text v
     ppPrec _ (TypeMismatch (e, loc) actual expected) =
         pp loc PP.<> ":" <+> "Expression " <+> cite e <+> "has type" <+> cite actual <+> "but" <+> cite expected <+> "was expected."
     ppPrec _ (ExpectedFunction (actual, loc) tp) =
@@ -97,7 +101,7 @@ instance Pretty (TypingError Ast.Expr) where
         pp loc PP.<> ":" <+> "Expression" <+> cite actual <+> "has type" <+> pp tp <+> "but a sort was expected."
 
 instance Pretty (TypingError T.Term) where
-    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text (unpack v)
+    ppPrec _ (UnknownVar v) = "Variable not in scope:" <+> text v
     ppPrec _ (TypeMismatch e actual expected) =
         "Expression " <+> cite e <+> "has type" <+> cite actual <+> "but" <+> cite expected <+> "was expected."
     ppPrec _ (ExpectedFunction actual tp) =
@@ -125,7 +129,7 @@ instance Pretty Stmt.EngineError where
         Stmt.ProovingErr err -> pp err
 
 ppEnv :: T.Env -> Doc
-ppEnv env = vcat $ [text (unpack v) <+> ":" <+> pp t | (v, t) <- assumptions]
+ppEnv env = vcat $ [text v <+> ":" <+> pp t | (v, t) <- assumptions]
   where
     assumptions :: [(Text, T.Term)]
     assumptions = map (\(a, (tp, _)) -> (a, tp)) $ Context.toList env
@@ -136,6 +140,4 @@ instance Pretty P.Proof where
             then "No more subgoals."
             else ppEnv (P.assumptions pf) $$ sizedText 50 (replicate 80 '=') $$ pp (P.consequence pf)
 
-instance Pretty ParsingError where ppPrec _ (PErr e) = text $ errorBundlePretty e
-
--- instance Show P.Proof where show = renderP
+instance Pretty ParsingError where ppPrec _ (PErr e) = string $ errorBundlePretty e
