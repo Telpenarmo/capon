@@ -13,6 +13,7 @@ module Capon.Types (
   var,
   name,
   emptyEnv,
+  freeIn,
 ) where
 
 import qualified Data.Map as Map
@@ -120,3 +121,17 @@ shift d x e = go e 0
      where
       !n' = if x == x' && n >= lev then n + d else n
     Sort s -> Sort s
+
+freeIn :: Var -> Term -> Bool
+freeIn v@(V x n) = go
+ where
+  go = \case
+    Var v' -> v == v'
+    App f a -> go f || go a
+    Lambda (LD x' tp bd) -> go tp || if x == x' then freeIn (V x n') bd else go bd
+     where
+      !n' = n + 1
+    ForAll (FD x' tp bd) -> go tp || if x == x' then freeIn (V x n') bd else go bd
+     where
+      !n' = n + 1
+    Sort so -> False
