@@ -12,16 +12,22 @@ module Capon.Types (
   substitute,
   var,
   name,
-  emptyEnv,
   freeIn,
+  emptyEnv,
+  lookupType,
+  lookupDefinition,
+  insertAbstract,
+  insertDefined,
+  union,
+  toList,
 ) where
 
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
-import qualified Capon.Context as Context
 import qualified Capon.Syntax.Ast as Ast
+import Data.Bifunctor (bimap)
 
 data Var = V Text Int deriving (Eq, Ord)
 name :: Var -> Text
@@ -34,8 +40,8 @@ instance Show Var where
 
 data Sort = Prop | Type Int deriving (Show, Eq)
 
-data LData = LD Text Term Term
-data FData = FD Text Term Term
+data LData = LD Text Term Term deriving (Show)
+data FData = FD Text Term Term deriving (Show)
 
 data Term
   = Sort Sort
@@ -43,11 +49,32 @@ data Term
   | App Term Term
   | Lambda LData
   | ForAll FData
+  deriving (Show)
 
-type Env = Context.Context Term
+newtype Env = Env (Map.Map Text (Term, Maybe Term))
 
 emptyEnv :: Env
-emptyEnv = Context.empty (shift 1)
+emptyEnv = Env Map.empty
+
+shiftEntry k = bimap (shift 1 k) (fmap (shift 1 k))
+
+insertAbstract :: Text -> Term -> Env -> Env
+insertAbstract k v (Env m) = Env (shiftEntry k <$> Map.insert k (v, Nothing) m)
+
+insertDefined :: Text -> Term -> Term -> Env -> Env
+insertDefined k def tp (Env env) = Env (shiftEntry k <$> Map.insert k (tp, Just def) env)
+
+lookupType :: Text -> Env -> Maybe Term
+lookupType k (Env env) = fst <$> Map.lookup k env
+
+lookupDefinition :: Text -> Env -> Maybe Term
+lookupDefinition k (Env env) = Map.lookup k env >>= snd
+
+toList :: Env -> [(Text, (Term, Maybe Term))]
+toList (Env env) = Map.toList env
+
+union :: Env -> Env -> Env
+union (Env l) (Env r) = Env $ Map.union l r
 
 instance Eq Term where
   (==) = alpha []
@@ -72,12 +99,12 @@ eval :: Env -> Term -> Term
 eval defs = \case
   App f a ->
     case go f of
-      Lambda (LD x tp body) -> go $ substitute x a body
+      Lambda (LD x _ body) -> go $ substitute x a body
       f' -> App f' $ go a
   Lambda (LD v t bd) -> Lambda $ LD v (go t) (go bd)
   ForAll (FD v t bd) -> ForAll $ FD v (go t) (go bd)
   Sort s -> Sort s
-  e@(Var (V x n)) -> fromMaybe e (Context.lookupDefinition x defs)
+  e@(Var (V x n)) -> fromMaybe e (lookupDefinition x defs)
  where
   go = eval defs
 

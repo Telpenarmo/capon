@@ -20,7 +20,6 @@ library
         Capon.Syntax.Parser,
         Capon.Syntax.Stmt,
         Capon.Syntax.StmtParser,
-        Capon.Context,
         Capon.Engine,
         Capon.Types,
         Capon.Typechecker,

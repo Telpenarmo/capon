@@ -13,7 +13,6 @@ module Capon.Proof (
 
 import Data.Text (Text)
 
-import qualified Capon.Context as Context
 import Capon.Syntax.Ast (Expr)
 import Capon.Typechecker (TypingError, checkAgainst, typecheck, typecheckWith)
 import Capon.Types
@@ -38,8 +37,7 @@ data ProovingError
     = NoMoreGoals
     | GoalLeft
     | ExpectedProduct
-    | ExpectedPiOrGoal Term
-    | AssumptionNotFound Text
+    | NotUnifiable Term Term
     | WrongProof (TypingError Term)
     | ExpectedProp (TypingError Expr)
 
@@ -90,7 +88,7 @@ intro name = withGoal doIntro
             return $ Incomplete (env', ass) (CAbs name tp ctx)
           where
             ass = substitute v (Var $ var name) (normalize bd)
-            env' = Context.insertAbstract name tp env
+            env' = insertAbstract name tp env
         _ -> Left ExpectedProduct
 
 unfoldApp :: Term -> Goal -> Context -> Result Context
@@ -99,7 +97,7 @@ unfoldApp arg (env, t) ctx = case arg of
     ForAll (FD v tp bd) -> do
         newCtx <- unfoldApp bd (env, t) ctx
         return $ CApL newCtx $ Goal (env, tp) -- co z v? bd może je zawierać!
-    _ -> Left $ ExpectedPiOrGoal t
+    _ -> Left $ NotUnifiable arg t
 
 fill :: Term -> Context -> ProofState
 fill t ctx = case ctx of
@@ -115,8 +113,8 @@ fill t ctx = case ctx of
 applyAssm :: Text -> Proove Proof
 applyAssm name = withGoal doApply
   where
-    doApply g@(env, t) ctx = case Context.lookupType name env of
-        Nothing -> Left $ AssumptionNotFound name
+    doApply g@(env, t) ctx = case lookupType name env of
+        Nothing -> Left $ NotUnifiable v t
         Just t' -> do
             newCtx <- unfoldApp t' g ctx
             return $ fill v newCtx

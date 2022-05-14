@@ -10,12 +10,12 @@ import Text.Megaparsec (ParseErrorBundle, errorBundlePretty)
 import Text.PrettyPrint hiding (text)
 import qualified Text.PrettyPrint as PP
 
-import qualified Capon.Context as Context
 import qualified Capon.Proof as P
 import qualified Capon.Syntax.Ast as Ast
 import Capon.Syntax.Lexer (ParsingError (PErr))
 import qualified Capon.Syntax.Stmt as Stmt
 import Capon.Typechecker (TypingError (..))
+import Capon.Types (toList)
 import qualified Capon.Types as T
 
 class Pretty p where
@@ -117,8 +117,7 @@ instance Pretty P.ProovingError where
         P.NoMoreGoals -> "Proof is not yet complete."
         P.GoalLeft -> "Proof is already complete."
         P.ExpectedProduct -> "No product even after reduction."
-        P.ExpectedPiOrGoal t -> "Invalid application of" <+> pp t
-        P.AssumptionNotFound v -> "The reference" <+> text (unpack v) <+> "was not found in the current environment."
+        P.NotUnifiable from to -> "Unable to unify" <+> pp from <+> "to" <+> pp to PP.<> "."
         P.WrongProof err -> "The proof is wrong:" <+> pp err
         P.ExpectedProp err -> "Typechecker failed with following error:" $$ pp err
 
@@ -132,7 +131,7 @@ ppEnv :: T.Env -> Doc
 ppEnv env = vcat $ [text v <+> ":" <+> pp t | (v, t) <- assumptions]
   where
     assumptions :: [(Text, T.Term)]
-    assumptions = map (\(a, (tp, _)) -> (a, tp)) $ Context.toList env
+    assumptions = map (\(a, (tp, _)) -> (a, tp)) $ toList env
 
 instance Pretty P.Proof where
     ppPrec _ pf =
