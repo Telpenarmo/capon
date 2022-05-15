@@ -4,13 +4,14 @@ import Data.Text (Text)
 
 import Capon.Proof (ProovingError)
 import Capon.Syntax.Ast (Expr)
+import Capon.Typechecker (TypingError)
 
 type Definitions = [(Text, Expr)]
 
 data Statement
     = InitProof Expr
     | Intro Text
-    | Apply Text Definitions
+    | Apply Expr Definitions
     | Rewrite Text Definitions
     | Unfold Text
     | Show Text
@@ -18,4 +19,8 @@ data Statement
     | Abandon
     | Qed
 
-data EngineError = NoProof | ActiveProof | ProovingErr ProovingError
+data EngineError
+    = NoProof
+    | ActiveProof
+    | ProovingErr ProovingError
+    | TypingError (TypingError Expr)

@@ -7,7 +7,7 @@ module Capon.Proof (
   consequence,
   proof,
   intro,
-  applyAssm,
+  apply,
   qed,
 ) where
 
@@ -16,6 +16,7 @@ import Data.Text (Text)
 import Capon.Syntax.Ast (Expr)
 import Capon.Typechecker
 import Capon.Types
+import Data.List (delete)
 
 type Goal = (Env, Term)
 data ProofTree
@@ -40,6 +41,7 @@ data ProovingError
   | NotUnifiable Term Term
   | WrongProof (TypingError Term)
   | ExpectedProp (TypingError Expr)
+  | TermError (TypingError Term) Env
 
 type Result a = Either ProovingError a
 
@@ -62,9 +64,10 @@ completed (P (_, Complete _)) = True
 completed (P (_, Incomplete _ _)) = False
 
 qed :: Proove Term
-qed (P (g, Complete t)) = case checkType emptyEnv t g of
-  Left err -> Left $ WrongProof err
-  Right te -> return te
+qed (P (g, Complete t)) =
+  case checkType emptyEnv t g of
+    Left err -> Left $ WrongProof err
+    Right te -> return te
 qed (P (_, Incomplete _ _)) = Left GoalLeft
 
 goUp :: Context -> ProofTree -> ProofState
@@ -87,16 +90,29 @@ intro name = withGoal doIntro
     ForAll (FD v tp bd) ->
       return $ Incomplete (env', ass) (CAbs name tp ctx)
      where
-      ass = substitute v (Var $ var name) (normalize bd)
+      ass = substitute v (Var $ var name) bd
       env' = insertAbstract name tp env
     _ -> Left ExpectedProduct
 
-unfoldApp :: Term -> Goal -> Context -> Result Context
-unfoldApp arg (env, t) ctx = case arg of
-  t' | eval env t == eval env t' -> return ctx -- arg może być typem zależnym
-  ForAll (FD v tp bd) -> do
-    newCtx <- unfoldApp bd (env, t) ctx
-    return $ CApL newCtx $ Goal (env, tp) -- co z v? bd może je zawierać!
+unfoldApp :: [(Text, Term)] -> Term -> Goal -> Context -> Result (Goal, Context)
+unfoldApp defs arg g@(env, t) ctx = case arg of
+  t' | eval env t == eval env t' -> return (g, ctx)
+  ForAll (FD x tp bd) -> do
+    (rpf, newDefs, arg') <-
+      case lookup x defs of
+        Nothing ->
+          if var x `freeIn` bd
+            then Left $ NotUnifiable arg t
+            else return (Goal (env, tp), defs, bd)
+        Just def -> case checkType env def tp of
+          Left err -> Left $ TermError err env
+          Right def -> return (Done def, defs', bd')
+           where
+            defs' = delete (x, def) defs
+            bd' = substitute x def bd
+
+    (g', newCtx) <- unfoldApp newDefs arg' g ctx
+    return (g', CApL newCtx rpf)
   _ -> Left $ NotUnifiable arg t
 
 fill :: Term -> Context -> ProofState
@@ -110,13 +126,11 @@ fill t ctx = case ctx of
     Complete t' -> fill (App t' t) ctx'
     Incomplete g ctx'' -> Incomplete g $ CApL ctx'' $ Done t
 
-applyAssm :: Text -> Proove Proof
-applyAssm name = withGoal doApply
+apply :: Term -> [(Text, Term)] -> Proove Proof
+apply t defs = withGoal doApply
  where
-  doApply g@(env, t) ctx = case lookupType name env of
-    Nothing -> Left $ NotUnifiable v t
-    Just t' -> do
-      newCtx <- unfoldApp t' g ctx
-      return $ fill v newCtx
-   where
-    v = Var $ var name
+  doApply g@(env, consq) ctx = case inferType env t of
+    Left err -> Left $ TermError err env
+    Right (t', tp) -> do
+      (_, newCtx) <- unfoldApp defs tp g ctx
+      return $ fill t' newCtx

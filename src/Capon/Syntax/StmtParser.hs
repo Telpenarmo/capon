@@ -25,10 +25,10 @@ pApply :: Parser Statement
 pApply = apply <$> (rword "apply" >> pBody)
  where
   pBody = do
-    id <- pIdentifier
+    e <- pExpr
     defs <- optional pWith
-    pure (id, fromMaybe [] defs)
-  apply (v, defs) = Apply v defs
+    pure (e, fromMaybe [] defs)
+  apply (e, defs) = Apply e defs
   pWith = rword "with" *> sepBy1 pBinding (symbol ",")
   pBinding = do
     id <- pIdentifier

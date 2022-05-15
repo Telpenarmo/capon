@@ -40,7 +40,7 @@ pIdentifier = (lexeme . try) (p >>= check)
     if x `elem` rws
       then fail $ "keyword " ++ show x ++ " cannot be an identifier"
       else return x
-  rws = ["let", "in", "λ", "forall", "∀", "Type", "Prop"]
+  rws = ["let", "in", "λ", "forall", "∀", "Type", "Prop", "with"]
 
 rword :: Text -> Parser ()
 rword w = string w *> notFollowedBy alphaNumChar *> sc

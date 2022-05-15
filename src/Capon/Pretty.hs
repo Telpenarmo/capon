@@ -120,12 +120,14 @@ instance Pretty P.ProovingError where
         P.NotUnifiable from to -> "Unable to unify" <+> pp from <+> "to" <+> pp to PP.<> "."
         P.WrongProof err -> "The proof is wrong:" <+> pp err
         P.ExpectedProp err -> "Typechecker failed with following error:" $$ pp err
+        P.TermError err env -> "Typechecker failed with following error:" $$ pp err
 
 instance Pretty Stmt.EngineError where
     ppPrec _ = \case
         Stmt.NoProof -> "No active proof."
         Stmt.ActiveProof -> "You have an unfinished proof."
         Stmt.ProovingErr err -> pp err
+        Stmt.TypingError err -> pp err
 
 ppEnv :: T.Env -> Doc
 ppEnv env = vcat $ [text v <+> ":" <+> pp t | (v, t) <- assumptions]
