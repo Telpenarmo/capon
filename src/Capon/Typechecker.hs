@@ -3,7 +3,11 @@
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Capon.Typechecker (typecheck, typecheckWith, TypingError (..), Infer, checkAgainst) where
+module Capon.Typechecker (
+    TypingError (..),
+    inferType,
+    checkType,
+) where
 
 import Control.Monad.Except
 import Data.Text
@@ -41,14 +45,12 @@ class Checkable a where
         case normalize tp of
             ForAll pi -> return (t, pi)
             _ -> throwError $ ExpectedFunction e tp
-typecheckWith :: Checkable a => Env -> a -> Either (TypingError a) (Term, Term)
-typecheckWith env = runExcept . infer env
 
-typecheck :: Checkable a => a -> Either (TypingError a) (Term, Term)
-typecheck = typecheckWith emptyEnv
+inferType :: Checkable a => Env -> a -> Either (TypingError a) (Term, Term)
+inferType env = runExcept . infer env
 
-checkAgainst :: Checkable a => a -> Term -> Either (TypingError a) Term
-checkAgainst m = runExcept . check emptyEnv m
+checkType :: Checkable a => Env -> a -> Term -> Either (TypingError a) Term
+checkType env m = runExcept . check env m
 
 type AstInfer a = Infer Ast.Expr a
 

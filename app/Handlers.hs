@@ -1,7 +1,7 @@
 module Handlers (
   IState,
   handleCommand,
-  test,
+  displayType,
 ) where
 
 import Console
@@ -16,9 +16,9 @@ import Capon.Pretty (Pretty, renderP)
 import Capon.Proof (Proof)
 import Capon.Syntax.Ast (Expr)
 import Capon.Syntax.Parser (parseExpr)
-import Capon.Syntax.Stmt (EngineError, Statement (..))
+import Capon.Syntax.Stmt (Statement (Abandon))
 import Capon.Syntax.StmtParser (parseStatements)
-import Capon.Typechecker (typecheck)
+import Capon.Typechecker (inferType)
 import Capon.Types (Env, Term)
 
 handleCommand :: (MonadIO m, MonadState IState m) => Text -> m ()
@@ -51,5 +51,9 @@ displayProof pf = do
  where
   height = maybe 5 ((`div` 2) . fst) <$> getTerminalSize
 
-test :: Text -> IO ()
-test = parseExpr "test" >|> typecheck >|> (liftIO . printP . snd)
+displayType :: (MonadIO m, MonadState IState m) => Text -> m ()
+displayType = parseExpr "test" >|> go
+ where
+  go e = do
+    (env, _) <- get
+    inferType env e |>> (liftIO . printP . snd)

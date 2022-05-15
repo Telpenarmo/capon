@@ -37,7 +37,7 @@ opts :: [(String, String -> Repl ())]
 opts =
   [ ("?", liftIO . help)
   , ("help", liftIO . help)
-  , ("type", liftIO . test . pack)
+  , ("type", displayType . pack)
   , ("quit", const quit)
   ]
 
