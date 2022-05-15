@@ -35,14 +35,14 @@ class Checkable a where
     inferSort :: Checkable a => Env -> a -> Infer a (Term, Sort)
     inferSort env e = do
         (t, tp) <- infer env e
-        case normalize tp of
+        case whnf tp of
             Sort s -> return (t, s)
             _ -> throwError $ ExpectedType e tp
 
     inferPi :: Checkable a => Env -> a -> Infer a (Term, FData)
     inferPi env e = do
         (t, tp) <- infer env e
-        case normalize tp of
+        case whnf tp of
             ForAll pi -> return (t, pi)
             _ -> throwError $ ExpectedFunction e tp
 

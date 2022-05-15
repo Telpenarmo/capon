@@ -86,7 +86,7 @@ withGoal f (P (m, Incomplete g ctx)) = f g ctx >>= (\s -> return $ P (m, s))
 intro :: Text -> Proove Proof
 intro name = withGoal doIntro
  where
-  doIntro (env, g) ctx = case normalize g of
+  doIntro (env, g) ctx = case whnf g of
     ForAll (FD v tp bd) ->
       return $ Incomplete (env', ass) (CAbs name tp ctx)
      where

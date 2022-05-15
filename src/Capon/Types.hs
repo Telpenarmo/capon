@@ -10,6 +10,7 @@ module Capon.Types (
   normalize,
   eval,
   substitute,
+  whnf,
   var,
   name,
   freeIn,
@@ -107,6 +108,12 @@ eval defs = \case
   e@(Var (V x n)) -> fromMaybe e (lookupDefinition x defs)
  where
   go = eval defs
+
+whnf :: Term -> Term
+whnf (App f a) = case whnf f of
+  Lambda (LD x _ bd) -> whnf $ substitute x a bd
+  f' -> App f' a
+whnf e = e
 
 normalize :: Term -> Term
 normalize = eval emptyEnv
