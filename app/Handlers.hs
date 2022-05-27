@@ -12,7 +12,7 @@ import Data.Text (Text, pack)
 import System.Console.ANSI (getTerminalSize)
 
 import Capon.Engine (IState, evalStatement)
-import Capon.Pretty (Pretty, renderP)
+import Capon.Pretty (Pretty, pretty)
 import Capon.Proof (Proof)
 import Capon.Syntax.Ast (Expr)
 import Capon.Syntax.Parser (parseExpr)
@@ -47,7 +47,7 @@ displayProof :: Proof -> IO ()
 displayProof pf = do
   times <- height
   putStrLn $ replicate times '\n'
-  printP pf
+  renderOut $ pretty pf
  where
   height = maybe 5 ((`div` 2) . fst) <$> getTerminalSize
 
@@ -56,4 +56,4 @@ displayType = parseExpr "test" >|> go
  where
   go e = do
     (env, _) <- get
-    inferType env e |>> (liftIO . printP . snd)
+    inferType env e |>> (liftIO . renderOut . pretty . snd)
