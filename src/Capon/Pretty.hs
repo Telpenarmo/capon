@@ -191,24 +191,4 @@ instance Pretty Stmt.EngineError where
         Stmt.ProovingErr err -> pretty err
         Stmt.TypingError err -> pretty err
 
-ppEnv :: T.Env -> Doc ann
-ppEnv env = vcat $ [pretty v <+> ":" <+> pretty t | (v, t) <- assumptions]
-  where
-    assumptions :: [(Text, T.Term)]
-    assumptions = map (\(a, (tp, _)) -> (a, tp)) $ toList env
-
-instance Pretty P.Proof where
-    pretty pf =
-        if P.completed pf
-            then "No more subgoals."
-            else
-                ppEnv (P.assumptions pf)
-                    <> hardline
-                    <> pageWidth ((hcat . flip Prelude.replicate "=") . maxWidth)
-                    <> hardline
-                    <> pretty (P.consequence pf)
-      where
-        maxWidth Unbounded = 50
-        maxWidth (AvailablePerLine width ribbon) = width
-
 instance Pretty ParsingError where pretty (PErr e) = pretty $ errorBundlePretty e

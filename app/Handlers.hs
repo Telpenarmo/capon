@@ -13,13 +13,15 @@ import System.Console.ANSI (getTerminalSize)
 
 import Capon.Engine (IState, evalStatement)
 import Capon.Pretty (Pretty, pretty)
-import Capon.Proof (Proof)
+import Capon.Proof (Proof, assumptions, completed, consequence)
 import Capon.Syntax.Ast (Expr)
 import Capon.Syntax.Parser (parseExpr)
 import Capon.Syntax.Stmt (Statement (Abandon))
 import Capon.Syntax.StmtParser (parseStatements)
 import Capon.Typechecker (inferType)
-import Capon.Types (Env, Term)
+import Capon.Types (Env, Term, toList)
+import Prettyprinter (Doc, PageWidth (..), hardline, hcat, pageWidth, vcat, (<+>))
+import Prettyprinter.Render.Terminal (AnsiStyle, Color (..))
 
 handleCommand :: (MonadIO m, MonadState IState m) => Text -> m ()
 handleCommand t = do
@@ -47,7 +49,7 @@ displayProof :: Proof -> IO ()
 displayProof pf = do
   times <- height
   putStrLn $ replicate times '\n'
-  renderOut $ pretty pf
+  renderOut $ pProof pf
  where
   height = maybe 5 ((`div` 2) . fst) <$> getTerminalSize
 
@@ -57,3 +59,23 @@ displayType = parseExpr "test" >|> go
   go e = do
     (env, _) <- get
     inferType env e |>> (liftIO . renderOut . pretty . snd)
+
+pEnv :: Env -> Doc AnsiStyle
+pEnv env = vcat $ [pretty v <+> withColor Yellow ":" <+> pretty t | (v, t) <- assumptions]
+ where
+  assumptions :: [(Text, Term)]
+  assumptions = map (\(a, (tp, _)) -> (a, tp)) $ toList env
+
+pProof :: Proof -> Doc AnsiStyle
+pProof pf =
+  if completed pf
+    then "No more subgoals."
+    else
+      pEnv (assumptions pf)
+        <> hardline
+        <> pageWidth ((withColor Black . hcat . flip Prelude.replicate "=") . maxWidth)
+        <> hardline
+        <> pretty (consequence pf)
+ where
+  maxWidth Unbounded = 50
+  maxWidth (AvailablePerLine width ribbon) = width

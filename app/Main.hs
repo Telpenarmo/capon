@@ -1,25 +1,32 @@
 module Main (main) where
 
-import Console
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Text (Text, pack)
 import Handlers
+import Prettyprinter (Doc)
+import Prettyprinter.Render.Terminal (AnsiStyle, Color (..))
 import System.Console.Repline
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 
+import Capon.Pretty (pretty)
 import qualified Capon.Syntax.Ast as Ast
 import Capon.Types (emptyEnv)
+import Console
 
 type Repl a = HaskelineT (StateT IState IO) a
 
-prompt :: MultiLine -> Repl String
+prompt :: MultiLine -> Repl (Doc AnsiStyle)
 prompt = \case
-  MultiLine -> pure ": "
+  MultiLine -> pure $ symbol ": "
   SingleLine -> do
     (_, pf) <- get
-    pure $ maybe ">>> " (const "prooving > ") pf
+    let start = maybe (symbol ">>") ((<> " ") . proofName) pf
+    pure $ start <> symbol "> "
+ where
+  proofName = const $ withColor White "prooving"
+  symbol = withColor Blue
 
 cmd :: String -> Repl ()
 cmd = handleCommand . pack
@@ -69,7 +76,7 @@ main =
  where
   ropts =
     ReplOpts
-      { banner = prompt
+      { banner = prompt >=> liftIO . renderString
       , command = cmd
       , options = opts
       , prefix = Just ':'
