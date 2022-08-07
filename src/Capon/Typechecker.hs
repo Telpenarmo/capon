@@ -12,6 +12,7 @@ module Capon.Typechecker (
 import Control.Monad.Except
 import Data.Text
 
+import Capon.Pretty (Doc, Pretty (pretty), cite, fillSep, (<+>))
 import qualified Capon.Syntax.Ast as Ast
 import Capon.Types
 
@@ -20,6 +21,35 @@ data TypingError a
     | TypeMismatch a Term Term
     | ExpectedFunction a Term
     | ExpectedType a Term
+
+prettyError :: (Pretty a) => TypingError a -> Doc ann
+prettyError (UnknownVar v) = "Variable not in scope:" <+> pretty v
+prettyError (TypeMismatch e actual expected) =
+    fillSep
+        [ "Expression"
+        , cite e
+        , "has type"
+        , cite actual
+        , "but"
+        , cite expected
+        , "was expected."
+        ]
+prettyError (ExpectedFunction actual tp) =
+    fillSep
+        [ "Expression"
+        , cite actual
+        , "is not a function and cannot be applied."
+        ]
+prettyError (ExpectedType actual tp) =
+    fillSep
+        [ "Expression"
+        , cite actual
+        , "has type"
+        , pretty tp
+        , "but a sort was expected."
+        ]
+
+instance Pretty a => Pretty (TypingError a) where pretty = prettyError
 
 type Infer i o = Checkable i => Except (TypingError i) o
 class Checkable a where

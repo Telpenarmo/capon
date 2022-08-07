@@ -23,12 +23,13 @@ module Capon.Types (
   toList,
 ) where
 
+import Data.Bifunctor (bimap)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
+import Capon.Pretty (Pretty, nest, pAbstraction, parensIf, pretty, prettyPrec, sep, (<+>))
 import qualified Capon.Syntax.Ast as Ast
-import Data.Bifunctor (bimap)
 
 data Var = V Text Int deriving (Eq, Ord)
 name :: Var -> Text
@@ -169,3 +170,19 @@ freeIn v@(V x n) = go
      where
       !n' = n + 1
     Sort so -> False
+
+instance Pretty Var
+
+instance Pretty Term where
+  pretty = prettyPrec 0
+  prettyPrec _ (Var v) = pretty v
+  prettyPrec _ (Sort Prop) = "Prop"
+  prettyPrec _ (Sort (Type i)) = "Type" <+> pretty i
+  prettyPrec p (Lambda (LD x tp bd)) =
+    parensIf (p > 0) $ pAbstraction "λ" p x tp bd
+  prettyPrec p (ForAll (FD "" tp bd)) =
+    parensIf (p > 4) $ sep [prettyPrec 5 tp, "⇒" <+> prettyPrec 4 bd]
+  prettyPrec p (ForAll (FD x tp bd)) =
+    parensIf (p > 0) $ pAbstraction "∀" p x tp bd
+  prettyPrec p (App l r) =
+    parensIf (p > 5) $ sep [prettyPrec 5 l, nest 2 $ prettyPrec 6 r]

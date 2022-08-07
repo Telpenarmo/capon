@@ -7,6 +7,8 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+import Capon.Pretty (Pretty (pretty))
+
 type Parser = Parsec Void Text
 
 sc :: Parser ()
@@ -49,3 +51,5 @@ pInt :: Parser Int
 pInt = L.decimal
 
 newtype ParsingError = PErr (ParseErrorBundle Text Void)
+
+instance Pretty ParsingError where pretty (PErr e) = pretty $ errorBundlePretty e

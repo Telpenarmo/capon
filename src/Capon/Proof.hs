@@ -13,6 +13,7 @@ module Capon.Proof (
 
 import Data.Text (Text)
 
+import Capon.Pretty (Pretty, fillSep, pretty)
 import Capon.Syntax.Ast (Expr)
 import Capon.Typechecker
 import Capon.Types
@@ -134,3 +135,22 @@ apply t defs = withGoal doApply
     Right (t', tp) -> do
       (_, newCtx) <- unfoldApp defs tp g ctx
       return $ fill t' newCtx
+
+instance Pretty ProovingError where
+  pretty = \case
+    NoMoreGoals -> "Proof is not yet complete."
+    GoalLeft -> "Proof is already complete."
+    ExpectedProduct -> "No product even after reduction."
+    NotUnifiable from to ->
+      fillSep ["Unable to unify", pretty from, "to", pretty to] <> "."
+    WrongProof err -> fillSep ["The proof is wrong:", pretty err]
+    ExpectedProp err ->
+      fillSep
+        [ "Typechecker failed with following error:"
+        , pretty err
+        ]
+    TermError err env ->
+      fillSep
+        [ "Typechecker failed with following error:"
+        , pretty err
+        ]
