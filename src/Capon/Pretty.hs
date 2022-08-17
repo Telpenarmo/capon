@@ -3,17 +3,19 @@
 
 module Capon.Pretty (
     Pretty (..),
+    Error (..),
     pBinding,
     pAbstraction,
     parensIf,
     cite,
-    module Prettyprinter
+    module Prettyprinter,
 ) where
 
 import Control.Monad.Except (runExcept)
 import qualified Data.Map as Map
 import Data.Text (Text, replicate, unpack)
 import Data.Void (Void)
+import Error.Diagnose (Diagnostic)
 import Prettyprinter hiding (Pretty, pretty)
 import qualified Prettyprinter as PP
 import Text.Megaparsec (ParseErrorBundle, errorBundlePretty)
@@ -42,3 +44,6 @@ pBinding x tp = parens $ pretty x PP.<> ":" <+> pretty tp
 pAbstraction :: (Pretty p) => Doc ann -> Int -> Text -> p -> p -> Doc ann
 pAbstraction symbol p x tp bd =
     sep [symbol <> pBinding x tp, nest 2 $ "→" <+> pretty bd]
+
+class Error a where
+    errorDiagnostic :: a -> Diagnostic Text

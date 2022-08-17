@@ -97,8 +97,9 @@ pExpr = makeExprParser (nonApp <|> inParens) table <?> "expression"
           )
       ]
     ]
+
 toLoc :: SourcePos -> Location
-toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, file = pack f}
+toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, Capon.Syntax.Ast.file = pack f}
 
 parseExpr :: String -> Text -> Either ParsingError Expr
-parseExpr s = first PErr . runParser (sc *> pExpr) s
+parseExpr = fileParser pExpr

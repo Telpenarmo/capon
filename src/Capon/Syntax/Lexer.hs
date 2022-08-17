@@ -1,13 +1,19 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Capon.Syntax.Lexer where
 
+import Data.Bifunctor (first)
 import Data.Char (isAlphaNum)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Data.Void (Void)
+import Error.Diagnose (Diagnostic, addFile, prettyDiagnostic)
+import Error.Diagnose.Compat.Megaparsec (HasHints, errorDiagnosticFromBundle, hints)
+import qualified Prettyprinter as PP
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Capon.Pretty (Pretty (pretty))
+import Capon.Pretty (Error (errorDiagnostic), Pretty (pretty), unAnnotate)
 
 type Parser = Parsec Void Text
 
@@ -50,6 +56,18 @@ rword w = string w *> notFollowedBy alphaNumChar *> sc
 pInt :: Parser Int
 pInt = L.decimal
 
-newtype ParsingError = PErr (ParseErrorBundle Text Void)
+newtype ParsingError = PErr (Diagnostic Text)
 
-instance Pretty ParsingError where pretty (PErr e) = pretty $ errorBundlePretty e
+instance PP.Pretty ParsingError where pretty (PErr e) = unAnnotate $ prettyDiagnostic True 4 e
+instance Pretty ParsingError where pretty (PErr e) = unAnnotate $ prettyDiagnostic True 4 e
+instance Error ParsingError where errorDiagnostic (PErr e) = e
+instance HasHints Void Text where hints = mempty
+
+fileParser :: Parser a -> String -> Text -> Either ParsingError a
+fileParser parser fileName content =
+  first makeError $ runParser (sc *> parser <* eof) fileName content
+ where
+  makeError bundle = PErr err
+   where
+    err = addFile diag fileName (unpack content)
+    diag = errorDiagnosticFromBundle Nothing "Parsing error" Nothing bundle

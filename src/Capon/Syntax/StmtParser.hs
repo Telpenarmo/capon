@@ -43,9 +43,9 @@ pStmt :: Parser Statement
 pStmt = choice [pInit, pIntro, pApply, pQed]
 
 parseStatement :: String -> Text -> Either ParsingError Statement
-parseStatement s = first PErr . runParser (sc *> pStmt <* eof) s
+parseStatement = fileParser pStmt
 
 parseStatements :: String -> Text -> Either ParsingError [Statement]
-parseStatements s = first PErr . runParser (sc *> pStmts <* eof) s
+parseStatements = fileParser pStmts
  where
   pStmts = sepBy pStmt $ symbol ";"

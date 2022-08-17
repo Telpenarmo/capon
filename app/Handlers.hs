@@ -26,7 +26,7 @@ import Prettyprinter.Render.Terminal (AnsiStyle, Color (..))
 handleCommand :: (MonadIO m, MonadState IState m) => Text -> m ()
 handleCommand t = do
   st <- get
-  parseStatements "statement" t |>> flip loop st
+  parseStatements "statement" t |>? flip loop st
  where
   loop [] st = updateState st
   loop (stmt : stmts) st =
@@ -54,7 +54,7 @@ displayProof pf = do
   height = maybe 5 ((`div` 2) . fst) <$> getTerminalSize
 
 displayType :: (MonadIO m, MonadState IState m) => Text -> m ()
-displayType = parseExpr "test" >|> go
+displayType = parseExpr "test" >?> go
  where
   go e = do
     (env, _) <- get

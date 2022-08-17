@@ -1,6 +1,8 @@
 module Console (
     (|>>),
     (>|>),
+    (|>?),
+    (>?>),
     renderOut,
     renderString,
     withColor,
@@ -14,14 +16,15 @@ import Control.Monad ((<=<), (>=>))
 import Control.Monad.Except (MonadIO, liftIO)
 import Data.Char (showLitChar, toLower)
 import Data.List (isPrefixOf)
-import Data.Text (unpack)
+import Data.Text (Text, unpack)
+import Error.Diagnose (Diagnostic, defaultStyle, printDiagnostic)
 import Prettyprinter (Doc, LayoutOptions (LayoutOptions), PageWidth (AvailablePerLine), SimpleDocStream, annotate, defaultLayoutOptions, hardline, layoutPretty, layoutSmart)
 import qualified Prettyprinter.Render.String as PS
 import Prettyprinter.Render.Terminal (AnsiStyle, Color (..), color, colorDull, renderIO, renderLazy, renderStrict)
 import System.Console.ANSI (getTerminalSize)
-import System.IO (stdout)
+import System.IO (stderr, stdout)
 
-import Capon.Pretty (Pretty (pretty))
+import Capon.Pretty (Error, Pretty (pretty), errorDiagnostic)
 
 (|>>) :: (Pretty e, MonadIO m) => Either e a -> (a -> m ()) -> m ()
 e |>> cont = either (liftIO . printError) cont e
@@ -29,6 +32,13 @@ e |>> cont = either (liftIO . printError) cont e
 infixr 1 >|>
 (>|>) :: (Pretty e, MonadIO m) => (t -> Either e a) -> (a -> m ()) -> t -> m ()
 f >|> g = \x -> f x |>> g
+
+(|>?) :: (Error e, MonadIO m) => Either e a -> (a -> m ()) -> m ()
+e |>? cont = either (liftIO . printDiag) cont e
+
+infixr 1 >?>
+(>?>) :: (Error e, MonadIO m) => (t -> Either e a) -> (a -> m ()) -> t -> m ()
+f >?> g = \x -> f x |>? g
 
 layout :: Doc ann -> IO (SimpleDocStream ann)
 layout doc = flip layoutSmart doc <$> options
@@ -56,8 +66,11 @@ withColor c = annotate (color c) . ("\STX" <>)
 withDull c = annotate (colorDull c) . ("\STX" <>)
 
 printError, printSuccess :: Pretty a => a -> IO ()
-printError = renderOut . withColor Red . pretty
+printError = renderOut . pretty
 printSuccess = renderOut . withColor Green . pretty
+
+printDiag :: Error e => e -> IO ()
+printDiag = printDiagnostic stderr True True 4 defaultStyle . errorDiagnostic
 
 confirm :: Bool -> IO Bool
 confirm deflt = do
