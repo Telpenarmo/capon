@@ -9,46 +9,74 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 import Capon.Syntax.Ast
 import Capon.Syntax.Lexer
+import Data.Foldable
+import Data.Set (singleton)
 
 type EParser = Parser ExprData
 
-pBinding :: Parser Binding
-pBinding = (binder <|> parensRec eatBind binder) <?> "variable binding"
+withLoc :: Parser a -> Parser (a, Location)
+withLoc parser = do
+  pos <- getSourcePos
+  x <- parser
+  pure (x, toLoc pos)
+
+pAnnotation :: Parser Expr
+pAnnotation = (pColon *> pExpr) <?> "type annotation"
  where
-  binder = do
-    v <- pIdentifier
-    t <- pAnn
-    pure $ Bind (v, t)
-  pAnn = (pColon *> pExpr) <?> "type annotation"
   pColon = symbol ":"
 
-pAbstractor :: (Binding -> Expr -> ExprData) -> Parser () -> EParser
-pAbstractor f sym = do
-  sym
-  b <- recParseUntil eatBind arr pBinding
-  f b <$> pExpr
+pBinding :: Parser (Binding, Location)
+pBinding = withLoc $ do
+  v <- pIdentifier
+  t <- pAnnotation
+  pure $ Bind (v, t)
+
+pAbstractor :: (Binding -> Expr -> ExprData) -> Parser () -> Parser Expr
+pAbstractor makeAbstraction parseSymbol = do
+  parseSymbol
+  bindings <- recParseUntil eater arr parseBindings
+  e <- pExpr
+  pure $ foldr instantiate e bindings
  where
+  instantiate (b, loc) e = (makeAbstraction b e, loc)
+  parseBindings = (annotatedIds <|> groups) <?> "variable binding"
+  groups = concat <$> some group
+  group = parensRec eater annotatedIds
+  annotatedIds = do
+    ids <- some (withLoc pIdentifier)
+    t <- pAnnotation
+    pure $ map (\(id, loc) -> (Bind (id, t), loc)) ids
+
+  eater :: Parser (Text -> [(Binding, Location)])
+  eater = do
+    eat <- bindEater
+    pure $ \t -> [eat t]
   arr = (symbol "->" <|> symbol "→") <?> "arrow"
 
 pLambda :: EParser
-pLambda = pAbstractor Lambda pSym
+pLambda = do
+  (e, loc) <- pAbstractor Lambda pSym
+  pure e
  where
   pSym = (symbol "\\" <|> symbol "λ") <?> "lambda"
 
 pForall :: EParser
-pForall = pAbstractor ForAll pSym
+pForall = do
+  (e, loc) <- pAbstractor ForAll pSym
+  pure e
  where
   pSym = (symbol "∀" <|> rword "forall") <?> "forall"
 
 pLetIn :: EParser
 pLetIn = do
   pLet
-  b <- recParseUntil eatBind (symbol "=") pBinding
-  e1 <- recParseUntil eatError pIn pExpr
+  (b, _) <- recParseUntil bindEater (symbol "=") pBinding
+  e1 <- recParseUntil exprEater pIn pExpr
   LetIn b e1 <$> pExpr
  where
   pIn = rword "in"
   pLet = rword "let"
+  pLetBinding = pBinding <|> parensRec bindEater pBinding
 
 pVar :: EParser
 pVar = (Var <$> pIdentifier) <?> "variable"
@@ -62,24 +90,23 @@ pSort = Sort <$> (pType <|> pProp) <?> "sort"
     return $ Type $ fromMaybe 1 i
   pProp = Prop <$ rword "Prop"
 
-eatError :: Parser (Text -> Expr)
-eatError = do
+exprEater :: Parser (Text -> Expr)
+exprEater = do
   pos <- getSourcePos
   pure $ \t -> (Error t, toLoc pos)
 
-eatBind :: Parser (Text -> Binding)
-eatBind = do
-  err <- eatError
-  return $ \t -> Bind ("#error", err t)
+bindEater :: Parser (Text -> (Binding, Location))
+bindEater = do
+  pos <- getSourcePos
+  eat <- exprEater
+  pure $ \t -> (Bind ("#error", eat t), toLoc pos)
 
 pExpr :: Parser Expr
 pExpr = makeExprParser (nonApp <|> inParens) table <?> "expression"
  where
-  inParens = parensRec eatError pExpr
-  nonApp = do
-    pos <- getSourcePos
-    dt <- choice [pVar, pLambda, pForall, pLetIn, pSort] <?> "expression"
-    pure (dt, toLoc pos)
+  inParens = parensRec exprEater pExpr
+  nonApp = withLoc exp
+  exp = choice [pVar, pLambda, pForall, pLetIn, pSort] <?> "expression"
   table =
     [
       [ InfixL -- application (A B)
