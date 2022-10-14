@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Handlers (
   IState,
   handleCommand,
@@ -13,7 +14,7 @@ import System.Console.ANSI (getTerminalSize)
 
 import Capon.Engine (IState, evalStatement)
 import Capon.Pretty (Pretty, pretty)
-import Capon.Proof (Proof, assumptions, completed, consequence)
+import Capon.Proof (Proof, ProofState (..), assumptions, consequence)
 import Capon.Syntax.Ast (Expr)
 import Capon.Syntax.Parser (parseExpr)
 import Capon.Syntax.Stmt (Statement (Abandon))
@@ -45,7 +46,7 @@ updateState st@(env, Just pf) = do
   put st
   liftIO $ displayProof pf
 
-displayProof :: Proof -> IO ()
+displayProof :: Proof 'Incomplete -> IO ()
 displayProof pf = do
   times <- height
   putStrLn $ replicate times '\n'
@@ -66,11 +67,8 @@ pEnv env = vcat $ [pretty v <+> withColor Yellow ":" <+> pretty t | (v, t) <- as
   assumptions :: [(Text, Term)]
   assumptions = map (\(a, (tp, _)) -> (a, tp)) $ toList env
 
-pProof :: Proof -> Doc AnsiStyle
+pProof :: Proof 'Incomplete -> Doc AnsiStyle
 pProof pf =
-  if completed pf
-    then "No more subgoals."
-    else
       pEnv (assumptions pf)
         <> hardline
         <> pageWidth ((withColor Black . hcat . flip Prelude.replicate "=") . maxWidth)

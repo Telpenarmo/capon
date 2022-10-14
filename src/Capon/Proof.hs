@@ -1,8 +1,13 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+
 module Capon.Proof (
   Proof,
-  Result (..),
+  ProofState (..),
+  ProovingResult (..),
+  UnknownProof (..),
   ProovingError (..),
-  completed,
   assumptions,
   consequence,
   proof,
@@ -17,14 +22,16 @@ import Capon.Pretty (Pretty, fillSep, pretty)
 import Capon.Syntax.Ast (Expr)
 import Capon.Typechecker
 import Capon.Types
+import Data.Bifunctor (bimap)
 import Data.List (delete)
 
 type Goal = (Env, Term)
-data ProofTree
-  = Done Term
-  | Goal Goal
-  | Appl ProofTree ProofTree
-  | Abst Text Term ProofTree
+
+data ProofTree where
+  Done :: Term -> ProofTree
+  Goal :: Goal -> ProofTree
+  Appl :: ProofTree -> ProofTree -> ProofTree
+  Abst :: Text -> Term -> ProofTree -> ProofTree
 
 data Context
   = Root
@@ -32,8 +39,10 @@ data Context
   | CApR ProofTree Context
   | CAbs Text Term Context
 
-data ProofState = Complete Term | Incomplete Goal Context
-newtype Proof = P (Term, ProofState)
+data ProofState = Complete | Incomplete
+data Proof (state :: ProofState) where
+  HasGoal :: Goal -> Context -> Proof 'Incomplete
+  NoGoal :: Term -> Proof 'Complete
 
 data ProovingError
   = NoMoreGoals
@@ -44,60 +53,53 @@ data ProovingError
   | ExpectedProp (TypingError Expr)
   | TermError (TypingError Term) Env
 
-type Result a = Either ProovingError a
+type ProovingResult a = Either ProovingError a
+type UnknownProof = Either (Proof 'Complete) (Proof 'Incomplete)
 
-type Proove a = Proof -> Result a
+mapResult :: (a -> b) -> (c -> d) -> Either a c -> Either b d
+mapResult = bimap
 
-proof :: Env -> Expr -> Result Proof
-proof env e = case checkType env e (Sort Prop) of
-  Left err -> Left $ ExpectedProp err
-  Right t -> pure $ P (t, Incomplete (env, t) Root)
+withGoal :: Goal -> Context -> Either a (Proof 'Incomplete)
+withGoal g ctx = Right $ HasGoal g ctx
 
-assumptions :: Proof -> Env
-assumptions (P (_, Complete _)) = error "proof completed"
-assumptions (P (_, Incomplete (env, _) _)) = env
-consequence :: Proof -> Term
-consequence (P (_, Complete _)) = error "proof completed"
-consequence (P (_, Incomplete (_, g) _)) = g
+finished :: Term -> Either (Proof 'Complete) a
+finished t = Left $ NoGoal t
 
-completed :: Proof -> Bool
-completed (P (_, Complete _)) = True
-completed (P (_, Incomplete _ _)) = False
+proof :: Env -> Expr -> ProovingResult (Proof 'Incomplete)
+proof env e = mapResult onErr onOk $ checkType env e (Sort Prop)
+ where
+  onErr = ExpectedProp
+  onOk t = HasGoal (env, t) Root
 
-qed :: Proove Term
-qed (P (g, Complete t)) =
-  case checkType emptyEnv t g of
-    Left err -> Left $ WrongProof err
-    Right te -> return te
-qed (P (_, Incomplete _ _)) = Left GoalLeft
+assumptions :: Proof 'Incomplete -> Env
+assumptions (HasGoal (env, _) _) = env
+consequence :: Proof 'Incomplete -> Term
+consequence (HasGoal (_, g) _) = g
 
-goUp :: Context -> ProofTree -> ProofState
-goUp ctx pf = case pf of
-  Done te -> Complete te
-  Goal g -> Incomplete g ctx
+qed :: Proof 'Complete -> Term
+qed (NoGoal t) = t
+
+goUp :: Context -> ProofTree -> UnknownProof
+goUp ctx = \case
+  Done t -> finished t
+  Goal g -> withGoal g ctx
   Abst v t pf' -> goUp (CAbs v t ctx) pf'
   Appl l r -> case goUp (CApL ctx r) l of
-    Complete t -> goUp (CApR l ctx) r
+    Left (NoGoal t) -> goUp (CApR l ctx) r
     inc -> inc
 
-withGoal :: (Goal -> Context -> Result ProofState) -> Proove Proof
-withGoal f (P (_, Complete _)) = Left NoMoreGoals
-withGoal f (P (m, Incomplete g ctx)) = f g ctx >>= (\s -> return $ P (m, s))
+intro :: Text -> Proof 'Incomplete -> ProovingResult (Proof 'Incomplete)
+intro name (HasGoal (env, g) ctx) = case whnf g of
+  ForAll (FD v tp bd) ->
+    withGoal (env', ass) $ CAbs name tp ctx
+   where
+    ass = substitute v (Var $ var name) bd
+    env' = insertAbstract name tp env
+  _notPi -> Left ExpectedProduct
 
-intro :: Text -> Proove Proof
-intro name = withGoal doIntro
- where
-  doIntro (env, g) ctx = case whnf g of
-    ForAll (FD v tp bd) ->
-      return $ Incomplete (env', ass) (CAbs name tp ctx)
-     where
-      ass = substitute v (Var $ var name) bd
-      env' = insertAbstract name tp env
-    _ -> Left ExpectedProduct
-
-unfoldApp :: [(Text, Term)] -> Term -> Goal -> Context -> Result (Goal, Context)
+unfoldApp :: [(Text, Term)] -> Term -> Goal -> Context -> ProovingResult (Proof 'Incomplete)
 unfoldApp defs arg g@(env, t) ctx = case arg of
-  t' | eval env t == eval env t' -> return (g, ctx)
+  t' | eval env t == eval env t' -> withGoal g ctx
   ForAll (FD x tp bd) -> do
     (rpf, newDefs, arg') <-
       case lookup x defs of
@@ -105,36 +107,36 @@ unfoldApp defs arg g@(env, t) ctx = case arg of
           if var x `freeIn` bd
             then Left $ NotUnifiable arg t
             else return (Goal (env, tp), defs, bd)
-        Just def -> case checkType env def tp of
-          Left err -> Left $ TermError err env
-          Right def -> return (Done def, defs', bd')
-           where
-            defs' = delete (x, def) defs
-            bd' = substitute x def bd
+        Just def -> mapResult onErr onOk $ checkType env def tp
+         where
+          onErr = flip TermError env
+          onOk def = (Done def, defs', bd')
+          defs' = delete (x, def) defs
+          bd' = substitute x def bd
 
-    (g', newCtx) <- unfoldApp newDefs arg' g ctx
-    return (g', CApL newCtx rpf)
-  _ -> Left $ NotUnifiable arg t
+    res <- unfoldApp newDefs arg' g ctx
+    let HasGoal g' newCtx = res
+    withGoal g' $ CApL newCtx rpf
+  _notPi -> Left $ NotUnifiable arg t
 
-fill :: Term -> Context -> ProofState
+fill :: Term -> Context -> UnknownProof
 fill t ctx = case ctx of
-  Root -> Complete t
+  Root -> finished t
   CAbs v tp ctx' -> fill (Lambda $ LD v tp t) ctx'
   CApL ctx' pf -> case goUp ctx' pf of
-    Complete t' -> fill (App t t') ctx'
-    Incomplete g ctx'' -> Incomplete g $ CApR (Done t) ctx''
+    Left (NoGoal t') -> fill (App t t') ctx'
+    Right (HasGoal g ctx'') -> withGoal g $ CApR (Done t) ctx''
   CApR pf ctx' -> case goUp ctx' pf of
-    Complete t' -> fill (App t' t) ctx'
-    Incomplete g ctx'' -> Incomplete g $ CApL ctx'' $ Done t
+    Left (NoGoal t') -> fill (App t' t) ctx'
+    Right (HasGoal g ctx'') -> withGoal g $ CApL ctx'' $ Done t
 
-apply :: Term -> [(Text, Term)] -> Proove Proof
-apply t defs = withGoal doApply
- where
-  doApply g@(env, consq) ctx = case inferType env t of
-    Left err -> Left $ TermError err env
-    Right (t', tp) -> do
-      (_, newCtx) <- unfoldApp defs tp g ctx
-      return $ fill t' newCtx
+apply :: Term -> [(Text, Term)] -> Proof 'Incomplete -> ProovingResult UnknownProof
+apply t defs (HasGoal g@(env, consq) ctx) = case inferType env t of
+  Left err -> Left $ TermError err env
+  Right (t', tp) -> do
+    res <- unfoldApp defs tp g ctx
+    let HasGoal _ newCtx = res
+    return $ fill t' newCtx
 
 instance Pretty ProovingError where
   pretty = \case
