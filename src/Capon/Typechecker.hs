@@ -1,10 +1,13 @@
 {-# LANGUAGE ConstrainedClassMethods #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Capon.Typechecker (
     TypingError (..),
+    Inferred (..),
     inferType,
     checkType,
 ) where
@@ -15,6 +18,7 @@ import Data.Text
 import Capon.Pretty (Doc, Pretty (pretty), cite, fillSep, (<+>))
 import qualified Capon.Syntax.Ast as Ast
 import Capon.Types
+import Data.Functor ((<&>))
 
 data TypingError a
     = UnknownVar Text
@@ -52,31 +56,37 @@ prettyError (ExpectedType actual tp) =
 instance Pretty a => Pretty (TypingError a) where pretty = prettyError
 
 type Infer i o = Checkable i => Except (TypingError i) o
+
+data Inferred a b = Inferred
+    { term :: a
+    , typ :: b
+    }
+
 class Checkable a where
     -- type Infer t = Except InferenceError t
-    infer :: Checkable a => Env -> a -> Infer a (Term, Term)
+    infer :: Checkable a => Env -> a -> Infer a (Inferred Term Term)
     check :: Checkable a => Env -> a -> Term -> Infer a Term
     check env e tp = do
-        (et, etp) <- infer env e
-        if eval env tp == eval env etp
-            then return et
-            else throwError $ TypeMismatch e etp tp
+        Inferred{..} <- infer env e
+        if eval env tp == eval env typ
+            then return term
+            else throwError $ TypeMismatch e typ tp
 
-    inferSort :: Checkable a => Env -> a -> Infer a (Term, Sort)
+    inferSort :: Checkable a => Env -> a -> Infer a (Inferred Term Sort)
     inferSort env e = do
-        (t, tp) <- infer env e
-        case whnf tp of
-            Sort s -> return (t, s)
-            _ -> throwError $ ExpectedType e tp
+        Inferred{..} <- infer env e
+        case whnf typ of
+            Sort s -> return Inferred{term = term, typ = s}
+            _other -> throwError $ ExpectedType e typ
 
-    inferPi :: Checkable a => Env -> a -> Infer a (Term, FData)
+    inferPi :: Checkable a => Env -> a -> Infer a (Inferred Term FData)
     inferPi env e = do
-        (t, tp) <- infer env e
-        case whnf tp of
-            ForAll pi -> return (t, pi)
-            _ -> throwError $ ExpectedFunction e tp
+        Inferred{..} <- infer env e
+        case whnf typ of
+            ForAll pi -> return Inferred{term = term, typ = pi}
+            _ -> throwError $ ExpectedFunction e typ
 
-inferType :: Checkable a => Env -> a -> Either (TypingError a) (Term, Term)
+inferType :: Checkable a => Env -> a -> Either (TypingError a) (Inferred Term Term)
 inferType env = runExcept . infer env
 
 checkType :: Checkable a => Env -> a -> Term -> Either (TypingError a) Term
@@ -89,38 +99,40 @@ instance Checkable Ast.Expr where
         (Ast.Var v) -> varRule env v
         (Ast.Sort s) -> do
             (s, tp) <- sortRule s
-            return (Sort s, Sort tp)
+            return Inferred{term = Sort s, typ = Sort tp}
         (Ast.Lambda b e) -> do
-            (ld, fd) <- absRule env b e loc
-            return (Lambda ld, ForAll fd)
+            Inferred{..} <- absRule env b e loc
+            return Inferred{term = Lambda term, typ = ForAll typ}
         (Ast.ForAll b e) -> do
-            (fd, s) <- piRule env b e loc
-            return (ForAll fd, Sort s)
+            Inferred{..} <- piRule env b e loc
+            return Inferred{term = ForAll term, typ = Sort typ}
         (Ast.App f arg) -> appRule env f arg
         (Ast.LetIn b def body) -> letInRule env b def body loc
         (Ast.Error e) -> undefined
       where
-        varRule :: Env -> Text -> AstInfer (Term, Term)
+        varRule :: Env -> Text -> AstInfer (Inferred Term Term)
         varRule env v = case lookupType v env of
             Nothing -> throwError $ UnknownVar v
-            Just t -> return (Var (var v), t)
+            Just typ -> return Inferred{term, typ} where term = Var $ var v
 
         sortRule :: Ast.Sort -> AstInfer (Sort, Sort)
         sortRule Ast.Prop = return (Prop, Type 1)
         sortRule (Ast.Type i) = return (Type i, Type $ i + 1)
 
-        absRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (LData, FData)
+        absRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (Inferred LData FData)
         absRule env (Ast.Bind (v, tp)) body loc = do
-            (ttp, _) <- inferSort env tp
+            Inferred{term = ttp} <- inferSort env tp
             let env' = insertAbstract v ttp env
-            (tbody, tbodytp) <- infer env' body
-            return (LD v ttp tbody, FD v ttp tbodytp)
+            Inferred{term = tbody, typ = tbodytp} <- infer env' body
+            let term = LD v ttp tbody
+            let typ = FD v ttp tbodytp
+            return Inferred{term, typ}
 
-        piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (FData, Sort)
+        piRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Location -> AstInfer (Inferred FData Sort)
         piRule env (Ast.Bind (v, tp)) body loc = do
-            (ttp, stp) <- inferSort env tp
+            Inferred ttp stp <- inferSort env tp
             let env' = insertAbstract v ttp env
-            (tbody, sbody) <- inferSort env' body
+            Inferred tbody sbody <- inferSort env' body
             let ret' = ret ttp tbody
              in case sbody of
                     Prop -> ret' Prop
@@ -128,22 +140,22 @@ instance Checkable Ast.Expr where
                         Prop -> ret' sbody
                         Type n' -> ret' $ Type $ max n n'
           where
-            ret a b s = return (FD v a b, s)
+            ret a b typ = return Inferred{term = FD v a b, typ}
 
-        appRule :: Env -> Ast.Expr -> Ast.Expr -> AstInfer (Term, Term)
+        appRule :: Env -> Ast.Expr -> Ast.Expr -> AstInfer (Inferred Term Term)
         appRule env f arg = do
-            (tf, FD v i o) <- inferPi env f
+            Inferred tf (FD v i o) <- inferPi env f
             targ <- check env arg i
-            return (App tf targ, substitute v targ o)
+            return Inferred{term = App tf targ, typ = substitute v targ o}
 
-        letInRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Expr -> Ast.Location -> AstInfer (Term, Term)
+        letInRule :: Env -> Ast.Binding -> Ast.Expr -> Ast.Expr -> Ast.Location -> AstInfer (Inferred Term Term)
         -- let v:tp = def in body === (\v:tp -> body) arg
         letInRule env (Ast.Bind (v, tp)) def body loc = do
-            (tp', _) <- inferSort env tp
+            Inferred tp' _ <- inferSort env tp
             tdef <- check env def tp'
             let env' = insertDefined v tdef tp' env
-            (tbody, tpbody) <- infer env' body
-            return (substitute v tdef tbody, substitute v tdef tpbody)
+            Inferred tbody tpbody <- infer env' body
+            return Inferred{term = substitute v tdef tbody, typ = substitute v tdef tpbody}
 
 instance Checkable Term where
     infer env t = withDef t $ case t of
@@ -166,27 +178,27 @@ instance Checkable Term where
 
         appRule :: Env -> Term -> Term -> Infer Term Term
         appRule env f arg = do
-            (tf, FD v i o) <- inferPi env f
+            Inferred tf (FD v i o) <- inferPi env f
             targ <- check env arg i
             return $ substitute v targ o
 
         absRule :: Env -> LData -> Infer Term FData
         absRule env (LD v tp body) = do
-            (ttp, _) <- inferSort env tp
+            Inferred ttp _ <- inferSort env tp
             let env' = insertAbstract v ttp env
-            (_, tbodytp) <- infer env' body
+            Inferred _ tbodytp <- infer env' body
             return $ FD v ttp tbodytp
 
         piRule :: Env -> FData -> Infer Term Sort
         piRule env (FD v tp body) = do
-            (ttp, stp) <- inferSort env tp
+            Inferred ttp stp <- inferSort env tp
             let env' = insertAbstract v ttp env
-            (_, sbody) <- inferSort env' body
+            Inferred _ sbody <- inferSort env' body
             case sbody of
                 Prop -> return Prop
                 Type n -> case stp of
                     Prop -> return sbody
                     Type n' -> return $ Type $ max n n'
 
-withDef :: Term -> Infer Term Term -> Infer Term (Term, Term)
-withDef t m = m >>= (\r -> return (t, r))
+withDef :: Term -> Infer Term Term -> Infer Term (Inferred Term Term)
+withDef term m = m <&> Inferred term

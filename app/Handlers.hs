@@ -19,7 +19,7 @@ import Capon.Syntax.Ast (Expr)
 import Capon.Syntax.Parser (parseExpr)
 import Capon.Syntax.Stmt (Statement (Abandon))
 import Capon.Syntax.StmtParser (parseStatements)
-import Capon.Typechecker (inferType)
+import Capon.Typechecker (inferType, Inferred (typ))
 import Capon.Types (Env, Term, toList)
 import Prettyprinter (Doc, PageWidth (..), hardline, hcat, pageWidth, vcat, (<+>))
 import Prettyprinter.Render.Terminal (AnsiStyle, Color (..))
@@ -59,7 +59,7 @@ displayType = parseExpr "test" >?> go
  where
   go e = do
     (env, _) <- get
-    inferType env e |>> (liftIO . renderOut . pretty . snd)
+    inferType env e |>> (liftIO . renderOut . pretty . typ)
 
 pEnv :: Env -> Doc AnsiStyle
 pEnv env = vcat $ [pretty v <+> withColor Yellow ":" <+> pretty t | (v, t) <- assumptions]

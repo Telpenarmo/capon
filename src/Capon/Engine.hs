@@ -1,13 +1,14 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TupleSections #-}
 
 module Capon.Engine where
 
-import Capon.Proof (Proof, ProovingError, apply, assumptions, intro, proof, qed, ProofState (..), UnknownProof (..))
+import Capon.Proof (Proof, ProofState (..), ProovingError, UnknownProof (..), apply, assumptions, intro, proof, qed)
 import Capon.Syntax.Stmt (EngineError (..), Statement (..))
 import Capon.Typechecker
-import Capon.Types (Env, union)
+import Capon.Types (Env, Term, union)
 
+import Capon.Syntax.Ast (Expr)
 import Control.Arrow (right)
 import Control.Monad.Except (runExcept, throwError)
 import Control.Monad.State (MonadState)
@@ -18,10 +19,12 @@ type IState = (Env, Maybe (Proof 'Incomplete))
 
 evalStatement :: IState -> Statement -> Either EngineError IState
 evalStatement (env, pf) = \case
-    InitProof thm -> case pf of
-        Nothing -> case proof env thm of
-            Left pe -> throwError $ ProovingErr pe
-            Right pr -> return (env, Just pr)
+    InitProof ethm -> case pf of
+        Nothing -> do
+            thm <- getType env ethm
+            case proof env thm of
+                Left pe -> throwError $ ProovingErr pe
+                Right pr -> return (env, Just pr)
         Just pr -> throwError ActiveProof
     Intro assm -> case pf of
         Just pf -> case intro assm pf of
@@ -31,17 +34,16 @@ evalStatement (env, pf) = \case
     Apply e defs -> case pf of
         Nothing -> throwError NoProof
         Just pf -> do
-            t <- getType e
+            arg <- getType env' e
             defs <- mapM mapBinding defs
-            case apply t defs pf of
+            case apply arg defs pf of
                 Left err -> throwError $ ProovingErr err
-                Right pf -> case pf of
-                  Right pf -> return (env, Just pf)
-                  Left cpf -> return (env, Nothing)
-            where
-                mapBinding (v, e) = (v,) `right` getType e
-                getType = bimap TypingError fst . inferType env'
-                env' = assumptions pf `union` env
+                Right ukn_pf -> case ukn_pf of
+                    Right inc_pf -> return (env, Just inc_pf)
+                    Left cpt_pf -> verifyProof env cpt_pf
+          where
+            mapBinding (v, e) = (v,) `right` getType env' e
+            env' = assumptions pf `union` env
     Rewrite assm defs -> error "not implemented"
     Unfold name -> error "not implemented"
     Show name -> error "not implemented"
@@ -50,5 +52,14 @@ evalStatement (env, pf) = \case
         Nothing -> throwError NoProof
         Just _ -> return (env, Nothing)
     Qed -> error "not supported"
+
+getType :: Env -> Expr -> Either EngineError Term
+getType env' = bimap TypingError term . inferType env'
+
+verifyProof :: Env -> Proof 'Complete -> Either EngineError IState
+verifyProof env = verifyTerm . qed
+  where
+    verifyTerm t = return (env, Nothing) -- TODO: check if proof is OK
+
 eval :: IState -> [Statement] -> Either EngineError IState
 eval = foldlM evalStatement

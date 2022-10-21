@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Capon.Proof (
   Proof,
@@ -50,7 +51,7 @@ data ProovingError
   | ExpectedProduct
   | NotUnifiable Term Term
   | WrongProof (TypingError Term)
-  | ExpectedProp (TypingError Expr)
+  | ExpectedProp (TypingError Term)
   | TermError (TypingError Term) Env
 
 type ProovingResult a = Either ProovingError a
@@ -65,7 +66,7 @@ withGoal g ctx = Right $ HasGoal g ctx
 finished :: Term -> Either (Proof 'Complete) a
 finished t = Left $ NoGoal t
 
-proof :: Env -> Expr -> ProovingResult (Proof 'Incomplete)
+proof :: Env -> Term -> ProovingResult (Proof 'Incomplete)
 proof env e = mapResult onErr onOk $ checkType env e (Sort Prop)
  where
   onErr = ExpectedProp
@@ -133,10 +134,10 @@ fill t ctx = case ctx of
 apply :: Term -> [(Text, Term)] -> Proof 'Incomplete -> ProovingResult UnknownProof
 apply t defs (HasGoal g@(env, consq) ctx) = case inferType env t of
   Left err -> Left $ TermError err env
-  Right (t', tp) -> do
-    res <- unfoldApp defs tp g ctx
+  Right Inferred{term, typ} -> do
+    res <- unfoldApp defs typ g ctx
     let HasGoal _ newCtx = res
-    return $ fill t' newCtx
+    return $ fill term newCtx
 
 instance Pretty ProovingError where
   pretty = \case
