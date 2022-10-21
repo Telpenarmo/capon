@@ -14,12 +14,6 @@ import Data.Set (singleton)
 
 type EParser = Parser ExprData
 
-withLoc :: Parser a -> Parser (a, Location)
-withLoc parser = do
-  pos <- getSourcePos
-  x <- parser
-  pure (x, toLoc pos)
-
 pAnnotation :: Parser Expr
 pAnnotation = (pColon *> pExpr) <?> "type annotation"
  where
@@ -92,14 +86,14 @@ pSort = Sort <$> (pType <|> pProp) <?> "sort"
 
 exprEater :: Parser (Text -> Expr)
 exprEater = do
-  pos <- getSourcePos
-  pure $ \t -> (Error t, toLoc pos)
+  loc <- getLocation
+  pure $ \t -> (Error t, loc)
 
 bindEater :: Parser (Text -> (Binding, Location))
 bindEater = do
-  pos <- getSourcePos
+  loc <- getLocation
   eat <- exprEater
-  pure $ \t -> (Bind ("#error", eat t), toLoc pos)
+  pure $ \t -> (Bind ("#error", eat t), loc)
 
 pExpr :: Parser Expr
 pExpr = makeExprParser (nonApp <|> inParens) table <?> "expression"
@@ -111,22 +105,19 @@ pExpr = makeExprParser (nonApp <|> inParens) table <?> "expression"
     [
       [ InfixL -- application (A B)
           ( do
-              pos <- getSourcePos
-              pure (\l r -> (App l r, toLoc pos))
+              loc <- getLocation
+              pure (\l r -> (App l r, loc))
           )
       ]
     ,
       [ InfixR -- arrow type (A ⇒ B)
           ( do
               (symbol "=>" <|> symbol "⇒") <?> "double arrow"
-              pos <- getSourcePos
-              pure (\l r -> (ForAll (Bind ("", l)) r, toLoc pos))
+              loc <- getLocation
+              pure (\l r -> (ForAll (Bind ("", l)) r, loc))
           )
       ]
     ]
-
-toLoc :: SourcePos -> Location
-toLoc (SourcePos f l c) = Location{line = unPos l, column = unPos c, Capon.Syntax.Ast.file = pack f}
 
 parseExpr :: String -> Text -> Either ParsingError Expr
 parseExpr = fileParser pExpr

@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Capon.Syntax.Lexer where
 
@@ -14,6 +15,8 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Capon.Pretty (Error (errorDiagnostic), Pretty (pretty), unAnnotate)
+import Capon.Syntax.Ast (Location (..))
+import Control.Monad (void)
 
 type Parser = Parsec Void Text
 
@@ -24,7 +27,22 @@ lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
 
 symbol :: Text -> Parser ()
-symbol t = () <$ L.symbol sc t
+symbol t = void $ L.symbol sc t
+
+withLoc :: Parser a -> Parser (a, Location)
+withLoc parser = do
+  loc <- getLocation
+  x <- parser
+  pure (x, loc)
+
+getLocation :: Parser Location
+getLocation = toLoc <$> getSourcePos
+ where
+  toLoc (SourcePos f l c) = Location{line, column, file}
+   where
+    line = unPos l
+    column = unPos c
+    file = pack f
 
 recParseUntil :: Parser (Text -> a) -> Parser b -> Parser a -> Parser a
 recParseUntil onErr end p = withRecovery recovery (p <* end)
